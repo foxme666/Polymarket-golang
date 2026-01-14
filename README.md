@@ -21,7 +21,7 @@ Follow at X:  @netu5er
 ## Installation
 
 ```bash
-go get github.com/foxme666/Polymarket-golang
+go get github.com/foxme666/Polymarket-golang@v0.0.1
 ```
 
 ## Quick Start
