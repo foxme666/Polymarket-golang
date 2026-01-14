@@ -171,13 +171,7 @@ func CreateLevel1Headers(signer *Signer, nonce *int) (map[string]string, error) 
 	}
 
 	// 调试输出（可以通过环境变量控制）
-	if os.Getenv("DEBUG_HEADERS") == "1" {
-		fmt.Fprintf(os.Stderr, "=== L1 Headers ===\n")
-		for k, v := range headers {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", k, v)
-		}
-		fmt.Fprintf(os.Stderr, "==================\n")
-	}
+	debugHeaders("L1", headers)
 
 	return headers, nil
 }
@@ -212,6 +206,35 @@ func CreateLevel2Headers(signer *Signer, creds *ApiCreds, requestArgs *RequestAr
 		PolyAPIKey:     creds.APIKey,
 		PolyPassphrase: creds.APIPassphrase,
 	}, nil
+}
+
+func debugHeaders(label string, headers map[string]string) {
+	if os.Getenv("DEBUG_HEADERS") != "1" {
+		return
+	}
+
+	showFull := os.Getenv("DEBUG_HEADERS_FULL") == "1"
+	fmt.Fprintf(os.Stderr, "=== %s Headers ===\n", label)
+	for k, v := range headers {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", k, redactHeaderValue(k, v, showFull))
+	}
+	fmt.Fprintf(os.Stderr, "==================\n")
+}
+
+func redactHeaderValue(name, value string, showFull bool) string {
+	if showFull || value == "" {
+		return value
+	}
+
+	switch name {
+	case PolySignature, PolyPassphrase, PolyAPIKey, PolyBuilderSignature, PolyBuilderPassphrase, PolyBuilderAPIKey:
+		if len(value) <= 8 {
+			return "REDACTED"
+		}
+		return value[:4] + "..." + value[len(value)-4:]
+	default:
+		return value
+	}
 }
 
 // Builder header 常量
@@ -252,4 +275,3 @@ func CreateBuilderHeaders(creds *ApiCreds, requestArgs *RequestArgs) (map[string
 		PolyBuilderPassphrase: creds.APIPassphrase,
 	}, nil
 }
-

@@ -5,6 +5,7 @@
 
 # 必需的环境变量
 export PRIVATE_KEY="${PRIVATE_KEY:-}"           # 私钥（必需）
+export PRIVATE_KEY_ENC_FILE="${PRIVATE_KEY_ENC_FILE:-}" # 加密私钥文件路径（可选）
 export CONDITION_ID="${CONDITION_ID:-}"         # 市场 Condition ID（必需）
 
 # 可选的环境变量
@@ -15,9 +16,10 @@ export AMOUNTS="${AMOUNTS:-}"                   # 赎回金额（逗号分隔，
 export NEG_RISK="${NEG_RISK:-false}"            # 是否为 NegRisk 市场
 
 # 检查必需的环境变量
-if [ -z "$PRIVATE_KEY" ]; then
-    echo "错误: 必须设置 PRIVATE_KEY 环境变量"
+if [ -z "$PRIVATE_KEY" ] && [ -z "$PRIVATE_KEY_ENC_FILE" ]; then
+    echo "错误: 必须设置 PRIVATE_KEY 或 PRIVATE_KEY_ENC_FILE"
     echo "用法: PRIVATE_KEY=0x... CONDITION_ID=0x... ./run.sh"
+    echo "或:  PRIVATE_KEY_ENC_FILE=/secrets/private_key.enc CONDITION_ID=0x... ./run.sh"
     exit 1
 fi
 

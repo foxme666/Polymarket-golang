@@ -1,7 +1,7 @@
 package polymarket
 
 import (
-	"github.com/0xNetuser/Polymarket-golang/polymarket/rfq"
+	"github.com/foxme666/Polymarket-golang/polymarket/rfq"
 )
 
 // CreateRfqRequest 创建RFQ请求（便捷方法）

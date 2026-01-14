@@ -4,6 +4,7 @@
 
 # 基本配置
 export PRIVATE_KEY="${PRIVATE_KEY:-}"
+export PRIVATE_KEY_ENC_FILE="${PRIVATE_KEY_ENC_FILE:-}"
 export CHAIN_ID="${CHAIN_ID:-137}"
 export CLOB_HOST="${CLOB_HOST:-https://clob.polymarket.com}"
 
@@ -15,6 +16,9 @@ export FUNDER="${FUNDER:-}"  # 代理钱包地址（可选）
 export CLOB_API_KEY="${CLOB_API_KEY:-}"
 export CLOB_SECRET="${CLOB_SECRET:-}"
 export CLOB_PASSPHRASE="${CLOB_PASSPHRASE:-}"
+export CLOB_API_KEY_ENC_FILE="${CLOB_API_KEY_ENC_FILE:-}"
+export CLOB_SECRET_ENC_FILE="${CLOB_SECRET_ENC_FILE:-}"
+export CLOB_PASSPHRASE_ENC_FILE="${CLOB_PASSPHRASE_ENC_FILE:-}"
 
 # 过滤参数（可选）
 export MARKET="${MARKET:-}"           # 市场 condition_id
@@ -24,4 +28,3 @@ export SINGLE_ORDER_ID="${SINGLE_ORDER_ID:-}"  # 单个订单 ID（获取详情�
 
 # 运行程序
 go run main.go
-

@@ -7,15 +7,19 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/0xNetuser/Polymarket-golang/polymarket/web3"
+	"github.com/foxme666/Polymarket-golang/polymarket"
+	"github.com/foxme666/Polymarket-golang/polymarket/web3"
 	"github.com/ethereum/go-ethereum/common"
 )
 
 func main() {
-	// 从环境变量读取配置
-	privateKey := os.Getenv("PRIVATE_KEY")
+	// 从环境变量或加密文件读取配置
+	privateKey, err := polymarket.ResolveSecret("PRIVATE_KEY", "PRIVATE_KEY_ENC_FILE")
+	if err != nil {
+		log.Fatalf("读取私钥失败: %v", err)
+	}
 	if privateKey == "" {
-		log.Fatal("错误: 必须设置 PRIVATE_KEY 环境变量")
+		log.Fatal("错误: 必须设置 PRIVATE_KEY 或 PRIVATE_KEY_ENC_FILE")
 	}
 
 	chainIDStr := os.Getenv("CHAIN_ID")

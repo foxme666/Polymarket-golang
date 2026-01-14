@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/0xNetuser/Polymarket-golang/polymarket"
+	"github.com/foxme666/Polymarket-golang/polymarket"
 )
 
 func main() {
@@ -22,9 +22,12 @@ func main() {
 		fmt.Sscanf(chainIDStr, "%d", &chainID)
 	}
 
-	privateKey := os.Getenv("PRIVATE_KEY")
+	privateKey, err := polymarket.ResolveSecret("PRIVATE_KEY", "PRIVATE_KEY_ENC_FILE")
+	if err != nil {
+		log.Fatalf("读取私钥失败: %v", err)
+	}
 	if privateKey == "" {
-		log.Fatalf("错误: 必须设置 PRIVATE_KEY 环境变量")
+		log.Fatalf("错误: 必须设置 PRIVATE_KEY 或 PRIVATE_KEY_ENC_FILE")
 	}
 
 	funder := os.Getenv("FUNDER") // 可选，用于代理钱包
@@ -58,9 +61,21 @@ func main() {
 
 	// 检查是否需要创建或派生API凭证
 	// 如果环境变量中已有API凭证，直接使用
-	apiKey := os.Getenv("CLOB_API_KEY")
-	apiSecret := os.Getenv("CLOB_SECRET")
-	apiPassphrase := os.Getenv("CLOB_PASSPHRASE")
+	apiKey, err := polymarket.ResolveSecret("CLOB_API_KEY", "CLOB_API_KEY_ENC_FILE")
+	if err != nil {
+		log.Fatalf("读取 CLOB_API_KEY 失败: %v", err)
+	}
+	apiSecret, err := polymarket.ResolveSecret("CLOB_SECRET", "CLOB_SECRET_ENC_FILE")
+	if err != nil {
+		log.Fatalf("读取 CLOB_SECRET 失败: %v", err)
+	}
+	apiPassphrase, err := polymarket.ResolveSecret("CLOB_PASSPHRASE", "CLOB_PASSPHRASE_ENC_FILE")
+	if err != nil {
+		log.Fatalf("读取 CLOB_PASSPHRASE 失败: %v", err)
+	}
+	if (apiKey != "" || apiSecret != "" || apiPassphrase != "") && (apiKey == "" || apiSecret == "" || apiPassphrase == "") {
+		log.Fatal("错误: API 凭证必须同时提供 (CLOB_API_KEY/SECRET/PASSPHRASE 或对应 *_ENC_FILE)")
+	}
 
 	var creds *polymarket.ApiCreds
 	if apiKey != "" && apiSecret != "" && apiPassphrase != "" {
@@ -84,11 +99,8 @@ func main() {
 			if err != nil {
 				log.Fatalf("创建API密钥失败: %v", err)
 			}
-			fmt.Println("⚠️  新API密钥已创建，请保存以下凭证：")
-			fmt.Printf("   API Key: %s\n", creds.APIKey)
-			fmt.Printf("   Secret: %s\n", creds.APISecret)
-			fmt.Printf("   Passphrase: %s\n", creds.APIPassphrase)
-			fmt.Println()
+			fmt.Println("⚠️  新API密钥已创建，请安全保存。")
+			printCredsIfAllowed(creds)
 		} else {
 			fmt.Println("✓ 成功派生API密钥")
 			// creds 已通过 DeriveAPIKey 自动设置到客户端
@@ -139,6 +151,17 @@ func main() {
 	}
 
 	fmt.Println("\n=== 查询完成 ===")
+}
+
+func printCredsIfAllowed(creds *polymarket.ApiCreds) {
+	if os.Getenv("PRINT_API_CREDS") != "1" {
+		fmt.Println("提示: 设置 PRINT_API_CREDS=1 可输出 API 凭证")
+		return
+	}
+	fmt.Printf("   API Key: %s\n", creds.APIKey)
+	fmt.Printf("   Secret: %s\n", creds.APISecret)
+	fmt.Printf("   Passphrase: %s\n", creds.APIPassphrase)
+	fmt.Println()
 }
 
 // printBalance 格式化打印余额信息

@@ -6,16 +6,19 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/0xNetuser/Polymarket-golang/polymarket"
-	"github.com/0xNetuser/Polymarket-golang/polymarket/web3"
+	"github.com/foxme666/Polymarket-golang/polymarket"
+	"github.com/foxme666/Polymarket-golang/polymarket/web3"
 	"github.com/ethereum/go-ethereum/common"
 )
 
 func main() {
-	// 从环境变量读取配置
-	privateKey := os.Getenv("PRIVATE_KEY")
+	// 从环境变量或加密文件读取配置
+	privateKey, err := polymarket.ResolveSecret("PRIVATE_KEY", "PRIVATE_KEY_ENC_FILE")
+	if err != nil {
+		log.Fatalf("读取私钥失败: %v", err)
+	}
 	if privateKey == "" {
-		log.Fatal("错误: 必须设置 PRIVATE_KEY 环境变量")
+		log.Fatal("错误: 必须设置 PRIVATE_KEY 或 PRIVATE_KEY_ENC_FILE")
 	}
 
 	chainIDStr := os.Getenv("CHAIN_ID")
@@ -62,9 +65,21 @@ func main() {
 
 	// Builder 凭证（必需）
 	var builderCreds *polymarket.ApiCreds
-	apiKey := os.Getenv("BUILDER_API_KEY")
-	apiSecret := os.Getenv("BUILDER_API_SECRET")
-	apiPassphrase := os.Getenv("BUILDER_API_PASSPHRASE")
+	apiKey, err := polymarket.ResolveSecret("BUILDER_API_KEY", "BUILDER_API_KEY_ENC_FILE")
+	if err != nil {
+		log.Fatalf("读取 BUILDER_API_KEY 失败: %v", err)
+	}
+	apiSecret, err := polymarket.ResolveSecret("BUILDER_API_SECRET", "BUILDER_API_SECRET_ENC_FILE")
+	if err != nil {
+		log.Fatalf("读取 BUILDER_API_SECRET 失败: %v", err)
+	}
+	apiPassphrase, err := polymarket.ResolveSecret("BUILDER_API_PASSPHRASE", "BUILDER_API_PASSPHRASE_ENC_FILE")
+	if err != nil {
+		log.Fatalf("读取 BUILDER_API_PASSPHRASE 失败: %v", err)
+	}
+	if (apiKey != "" || apiSecret != "" || apiPassphrase != "") && (apiKey == "" || apiSecret == "" || apiPassphrase == "") {
+		log.Fatal("错误: Builder 凭证必须同时提供 (BUILDER_API_KEY/SECRET/PASSPHRASE 或对应 *_ENC_FILE)")
+	}
 	if apiKey != "" && apiSecret != "" && apiPassphrase != "" {
 		builderCreds = &polymarket.ApiCreds{
 			APIKey:        apiKey,
@@ -166,4 +181,3 @@ func getSignatureTypeName(sigType int) string {
 		return "Unknown"
 	}
 }
-

@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"strconv"
 
-	obuilder "github.com/0xNetuser/Polymarket-golang/polymarket/order_builder"
+	obuilder "github.com/foxme666/Polymarket-golang/polymarket/order_builder"
 	"github.com/polymarket/go-order-utils/pkg/model"
 )
 

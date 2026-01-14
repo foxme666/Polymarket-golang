@@ -21,7 +21,7 @@ Follow at X:  @netu5er
 ## 安装
 
 ```bash
-go get github.com/0xNetuser/Polymarket-golang
+go get github.com/foxme666/Polymarket-golang
 ```
 
 ## 快速开始
@@ -33,7 +33,7 @@ package main
 
 import (
     "fmt"
-    "github.com/0xNetuser/Polymarket-golang/polymarket"
+    "github.com/foxme666/Polymarket-golang/polymarket"
 )
 
 func main() {
@@ -215,7 +215,7 @@ SDK 包含两个 Web3 客户端用于链上操作：
 ### PolymarketWeb3Client（支付 Gas）
 
 ```go
-import "github.com/0xNetuser/Polymarket-golang/polymarket/web3"
+import "github.com/foxme666/Polymarket-golang/polymarket/web3"
 
 // 创建 Web3 客户端（需要支付 gas）
 client, err := web3.NewPolymarketWeb3Client(
@@ -392,7 +392,7 @@ polymarket/
 
 示例程序使用以下环境变量：
 
-- `PRIVATE_KEY` (必需): 您的以太坊私钥（十六进制格式）
+- `PRIVATE_KEY` (必需，除非设置了 `PRIVATE_KEY_ENC_FILE`): 您的以太坊私钥（十六进制格式）
 - `CHAIN_ID` (可选): 链 ID（默认: 137，Polygon）
 - `SIGNATURE_TYPE` (可选): 签名类型（0=EOA, 1=Magic/Email, 2=Browser，默认: 0）
 - `FUNDER` (可选): 代理钱包的资金持有者地址
@@ -401,6 +401,17 @@ polymarket/
 - `CLOB_SECRET` (可选): L2 认证的 API 密钥
 - `CLOB_PASSPHRASE` (可选): L2 认证的 API 密钥
 - `TOKEN_ID` (可选): 条件代币余额查询的 token ID
+- `PRIVATE_KEY_ENC_FILE` (可选): 加密私钥文件路径（Fernet token），可替代 `PRIVATE_KEY`
+- `CLOB_API_KEY_ENC_FILE` (可选): 加密的 `CLOB_API_KEY` 文件路径（Fernet token）
+- `CLOB_SECRET_ENC_FILE` (可选): 加密的 `CLOB_SECRET` 文件路径（Fernet token）
+- `CLOB_PASSPHRASE_ENC_FILE` (可选): 加密的 `CLOB_PASSPHRASE` 文件路径（Fernet token）
+- `CLOB_*_ENC_FILE` (可选): 仅在需要复用固定的 L2 凭证时设置；否则可从 L1 自动派生。
+- `BUILDER_API_KEY_ENC_FILE` / `BUILDER_API_SECRET_ENC_FILE` / `BUILDER_API_PASSPHRASE_ENC_FILE` (可选): 加密的 Builder 凭证文件（gasless）
+- `POLY_ENC_KEY` (使用 *_ENC_FILE 时必需): Fernet key 或口令
+- `POLY_ENC_SALT` (POLY_ENC_KEY 为口令时必需): PBKDF2 盐值
+- `PRINT_API_CREDS` (可选): 设为 `1` 时输出新生成的 API 凭证
+- `DEBUG_HEADERS` (可选): 设为 `1` 时输出认证头（已脱敏）
+- `DEBUG_HEADERS_FULL` (可选): 设为 `1` 时输出完整认证头
 
 ## 参考
 
@@ -415,4 +426,3 @@ polymarket/
 ## 贡献
 
 欢迎贡献！请随时提交 Pull Request。
-

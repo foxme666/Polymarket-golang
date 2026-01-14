@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	obuilder "github.com/0xNetuser/Polymarket-golang/polymarket/order_builder"
-	"github.com/0xNetuser/Polymarket-golang/polymarket/rfq"
+	obuilder "github.com/foxme666/Polymarket-golang/polymarket/order_builder"
+	"github.com/foxme666/Polymarket-golang/polymarket/rfq"
 	"github.com/ethereum/go-ethereum/common"
 )
 

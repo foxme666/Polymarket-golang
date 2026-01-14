@@ -21,7 +21,7 @@ Follow at X:  @netu5er
 ## Installation
 
 ```bash
-go get github.com/0xNetuser/Polymarket-golang
+go get github.com/foxme666/Polymarket-golang
 ```
 
 ## Quick Start
@@ -33,7 +33,7 @@ package main
 
 import (
     "fmt"
-    "github.com/0xNetuser/Polymarket-golang/polymarket"
+    "github.com/foxme666/Polymarket-golang/polymarket"
 )
 
 func main() {
@@ -215,7 +215,7 @@ The SDK includes two Web3 clients for on-chain operations:
 ### PolymarketWeb3Client (Pay Gas)
 
 ```go
-import "github.com/0xNetuser/Polymarket-golang/polymarket/web3"
+import "github.com/foxme666/Polymarket-golang/polymarket/web3"
 
 // Create Web3 client (pays gas for transactions)
 client, err := web3.NewPolymarketWeb3Client(
@@ -392,7 +392,7 @@ polymarket/
 
 The example programs use the following environment variables:
 
-- `PRIVATE_KEY` (required): Your Ethereum private key in hex format
+- `PRIVATE_KEY` (required unless `PRIVATE_KEY_ENC_FILE` is set): Your Ethereum private key in hex format
 - `CHAIN_ID` (optional): Chain ID (default: 137 for Polygon)
 - `SIGNATURE_TYPE` (optional): Signature type (0=EOA, 1=Magic/Email, 2=Browser, default: 0)
 - `FUNDER` (optional): Funder address for proxy wallets
@@ -401,6 +401,17 @@ The example programs use the following environment variables:
 - `CLOB_SECRET` (optional): API secret for L2 authentication
 - `CLOB_PASSPHRASE` (optional): API passphrase for L2 authentication
 - `TOKEN_ID` (optional): Token ID for conditional token balance queries
+- `PRIVATE_KEY_ENC_FILE` (optional): Path to an encrypted private key (Fernet token); use instead of `PRIVATE_KEY`
+- `CLOB_API_KEY_ENC_FILE` (optional): Path to encrypted `CLOB_API_KEY` file (Fernet token)
+- `CLOB_SECRET_ENC_FILE` (optional): Path to encrypted `CLOB_SECRET` file (Fernet token)
+- `CLOB_PASSPHRASE_ENC_FILE` (optional): Path to encrypted `CLOB_PASSPHRASE` file (Fernet token)
+- `CLOB_*_ENC_FILE` (optional): Only needed if you want to reuse a fixed L2 credential; otherwise L2 creds can be derived from L1.
+- `BUILDER_API_KEY_ENC_FILE` / `BUILDER_API_SECRET_ENC_FILE` / `BUILDER_API_PASSPHRASE_ENC_FILE` (optional): Encrypted Builder creds (gasless)
+- `POLY_ENC_KEY` (required for *_ENC_FILE): Fernet key or passphrase
+- `POLY_ENC_SALT` (required when POLY_ENC_KEY is a passphrase): PBKDF2 salt
+- `PRINT_API_CREDS` (optional): Set to `1` to print newly created API credentials
+- `DEBUG_HEADERS` (optional): Set to `1` to log auth headers (redacted)
+- `DEBUG_HEADERS_FULL` (optional): Set to `1` to log full auth headers
 
 ## References
 
