@@ -208,6 +208,39 @@ result, err := client.CreateAndPostOrder(orderArgs, options)
 | `FAK` | Fill And Kill - 部分成交后取消剩余 |
 | `GTD` | Good Till Date - 直到指定时间（需要设置 `Expiration`） |
 
+### Post Only 订单
+
+Post Only 订单只有在为订单簿添加流动性（成为 maker 订单）时才会被接受。如果 Post Only 订单会立即匹配并成为 taker，则会被拒绝。
+
+```go
+// 使用 PostOrderWithOptions 提交 Post Only 订单
+result, err := client.PostOrderWithOptions(signedOrder, polymarket.OrderTypeGTC, true) // postOnly=true
+
+// 或使用 PostOrders 批量提交，设置 PostOnly 字段
+args := []polymarket.PostOrdersArgs{
+    {Order: signedOrder1, OrderType: polymarket.OrderTypeGTC, PostOnly: true},
+    {Order: signedOrder2, OrderType: polymarket.OrderTypeGTD, PostOnly: true},
+}
+result, err := client.PostOrders(args)
+```
+
+**注意**：Post Only 仅对 `GTC` 和 `GTD` 订单类型有效。
+
+### 心跳 API
+
+心跳 API 允许您在连接丢失时自动取消所有订单。一旦启动，您必须每 10 秒发送一次心跳，否则所有订单将被取消。
+
+```go
+// 使用可选 ID 发送心跳
+heartbeatID := "my-session-123"
+result, err := client.PostHeartbeat(&heartbeatID)
+
+// 或不使用 ID 发送
+result, err := client.PostHeartbeat(nil)
+```
+
+**使用场景**：防止交易系统意外离线时留下过期订单。
+
 ## Web3 客户端
 
 SDK 包含两个 Web3 客户端用于链上操作：
@@ -320,12 +353,13 @@ polymarket/
 - [x] **最后成交价**: `GetLastTradePrice()`, `GetLastTradesPrices()`
 
 ### ✅ 订单管理
-- [x] **订单提交**: `PostOrder()`, `PostOrders()`
+- [x] **订单提交**: `PostOrder()`, `PostOrders()`, `PostOrderWithOptions()`（支持 PostOnly）
 - [x] **订单取消**: `Cancel()`, `CancelOrders()`, `CancelAll()`, `CancelMarketOrders()`
 - [x] **订单查询**: `GetOrders()`, `GetOrder()`
 - [x] **交易查询**: `GetTrades()`
 - [x] **余额查询**: `GetBalanceAllowance()`
 - [x] **通知管理**: `GetNotifications()`, `DropNotifications()`
+- [x] **心跳**: `PostHeartbeat()` - 保持订单活跃（10秒无心跳自动取消订单）
 
 ### ✅ 订单构建和创建
 - [x] 订单构建器完整实现（使用 go-order-utils）
@@ -345,10 +379,11 @@ polymarket/
 - [x] `GetRfqRequests()` - 获取 RFQ 请求列表
 - [x] `CreateRfqQuote()` - 创建 RFQ 报价
 - [x] `CancelRfqQuote()` - 取消 RFQ 报价
-- [x] `GetRfqQuotes()` - 获取 RFQ 报价列表
+- [x] `GetRfqRequesterQuotes()` - 获取针对自己请求的报价（请求方视角）
+- [x] `GetRfqQuoterQuotes()` - 获取自己创建的报价（报价方视角）
 - [x] `GetRfqBestQuote()` - 获取最佳 RFQ 报价
-- [x] `AcceptQuote()` - 接受报价
-- [x] `ApproveOrder()` - 批准订单
+- [x] `AcceptQuote()` - 接受报价（请求方）
+- [x] `ApproveOrder()` - 批准订单（报价方）
 - [x] `GetRfqConfig()` - 获取 RFQ 配置
 
 ### ✅ Web3 客户端功能

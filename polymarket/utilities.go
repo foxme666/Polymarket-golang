@@ -78,6 +78,11 @@ func GenerateOrderBookSummaryHash(orderbook *OrderBookSummary) string {
 // OrderToJSON 将订单转换为JSON格式
 // 格式与 Python py_order_utils.SignedOrder.dict() 完全一致
 func OrderToJSON(order *SignedOrder, owner string, orderType OrderType) map[string]interface{} {
+	return OrderToJSONWithPostOnly(order, owner, orderType, false)
+}
+
+// OrderToJSONWithPostOnly 将订单转换为JSON格式（支持 PostOnly）
+func OrderToJSONWithPostOnly(order *SignedOrder, owner string, orderType OrderType, postOnly bool) map[string]interface{} {
 	// 将签名从 []byte 转换为 hex 字符串（带 0x 前缀）
 	var signatureHex string
 	if order.Signature != nil {
@@ -130,6 +135,7 @@ func OrderToJSON(order *SignedOrder, owner string, orderType OrderType) map[stri
 		"order":     orderDict,
 		"owner":     owner,
 		"orderType": string(orderType),
+		"postOnly":  postOnly,
 	}
 }
 

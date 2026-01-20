@@ -66,16 +66,20 @@ const (
 	// Builder
 	GetBuilderTrades = "/builder/trades"
 	
+	// Heartbeat
+	PostHeartbeat = "/v1/heartbeats"
+	
 	// RFQ
-	CreateRFQRequest    = "/rfq/request"
-	CancelRFQRequest    = "/rfq/request"
-	GetRFQRequests      = "/rfq/data/requests"
-	CreateRFQQuote      = "/rfq/quote"
-	CancelRFQQuote      = "/rfq/quote"
-	GetRFQQuotes        = "/rfq/data/quotes"
-	GetRFQBestQuote     = "/rfq/data/best-quote"
-	RFQRequestsAccept   = "/rfq/request/accept"
-	RFQQuoteApprove     = "/rfq/quote/approve"
-	RFQConfig           = "/rfq/config"
+	CreateRFQRequest       = "/rfq/request"
+	CancelRFQRequest       = "/rfq/request"
+	GetRFQRequests         = "/rfq/data/requests"
+	CreateRFQQuote         = "/rfq/quote"
+	CancelRFQQuote         = "/rfq/quote"
+	GetRFQRequesterQuotes  = "/rfq/data/requester/quotes"
+	GetRFQQuoterQuotes     = "/rfq/data/quoter/quotes"
+	GetRFQBestQuote        = "/rfq/data/best-quote"
+	RFQRequestsAccept      = "/rfq/request/accept"
+	RFQQuoteApprove        = "/rfq/quote/approve"
+	RFQConfig              = "/rfq/config"
 )
 

@@ -9,11 +9,23 @@ import (
 // 需要L2认证
 // 返回 PostOrderResult，包含原始 Payload 和 API 响应
 func (c *ClobClient) PostOrder(order *SignedOrder, orderType OrderType) (*PostOrderResult, error) {
+	return c.PostOrderWithOptions(order, orderType, false)
+}
+
+// PostOrderWithOptions 提交订单（支持 PostOnly 选项）
+// postOnly 订单只能是 GTC 或 GTD 类型
+// 需要L2认证
+// 返回 PostOrderResult，包含原始 Payload 和 API 响应
+func (c *ClobClient) PostOrderWithOptions(order *SignedOrder, orderType OrderType, postOnly bool) (*PostOrderResult, error) {
+	if postOnly && orderType != OrderTypeGTC && orderType != OrderTypeGTD {
+		return nil, fmt.Errorf("post_only orders can only be of type GTC or GTD")
+	}
+
 	if err := c.assertLevel2Auth(); err != nil {
 		return nil, err
 	}
 
-	body := OrderToJSON(order, c.creds.APIKey, orderType)
+	body := OrderToJSONWithPostOnly(order, c.creds.APIKey, orderType, postOnly)
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal order: %w", err)
@@ -51,9 +63,16 @@ func (c *ClobClient) PostOrders(args []PostOrdersArgs) (*PostOrdersResult, error
 		return nil, err
 	}
 
+	// 验证 PostOnly 订单类型
+	for _, arg := range args {
+		if arg.PostOnly && arg.OrderType != OrderTypeGTC && arg.OrderType != OrderTypeGTD {
+			return nil, fmt.Errorf("post_only orders can only be of type GTC or GTD")
+		}
+	}
+
 	body := make([]map[string]interface{}, len(args))
 	for i, arg := range args {
-		body[i] = OrderToJSON(arg.Order, c.creds.APIKey, arg.OrderType)
+		body[i] = OrderToJSONWithPostOnly(arg.Order, c.creds.APIKey, arg.OrderType, arg.PostOnly)
 	}
 
 	bodyJSON, err := json.Marshal(body)

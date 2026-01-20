@@ -50,10 +50,11 @@ type GetRfqRequestsParams struct {
 
 // GetRfqQuotesParams 获取RFQ报价参数
 type GetRfqQuotesParams struct {
-	RequestID string `json:"request_id,omitempty"`
-	TokenID   string `json:"token_id,omitempty"`
-	Side      string `json:"side,omitempty"`
-	Status    string `json:"status,omitempty"`
+	RequestID string   `json:"request_id,omitempty"`
+	TokenID   string   `json:"token_id,omitempty"`
+	Side      string   `json:"side,omitempty"`
+	Status    string   `json:"status,omitempty"`
+	QuoteIDs  []string `json:"quote_ids,omitempty"` // 指定报价ID列表
 }
 
 // GetRfqBestQuoteParams 获取最佳RFQ报价参数

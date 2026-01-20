@@ -156,8 +156,9 @@ type ContractConfig struct {
 
 // PostOrdersArgs 批量下单参数
 type PostOrdersArgs struct {
-	Order    *model.SignedOrder `json:"order"`
-	OrderType OrderType         `json:"orderType"`
+	Order     *model.SignedOrder `json:"order"`
+	OrderType OrderType          `json:"orderType"`
+	PostOnly  bool               `json:"postOnly,omitempty"`
 }
 
 // SignedOrder 已签名的订单（包装go-order-utils的SignedOrder）

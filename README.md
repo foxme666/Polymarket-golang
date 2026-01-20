@@ -208,6 +208,39 @@ result, err := client.CreateAndPostOrder(orderArgs, options)
 | `FAK` | Fill And Kill - partial fill, cancel remaining |
 | `GTD` | Good Till Date - expires at specified time (requires `Expiration`) |
 
+### Post Only Orders
+
+Post Only orders are only accepted if they add liquidity to the order book (become a maker order). If a Post Only order would immediately match and become a taker, it will be rejected.
+
+```go
+// Use PostOrderWithOptions for Post Only orders
+result, err := client.PostOrderWithOptions(signedOrder, polymarket.OrderTypeGTC, true) // postOnly=true
+
+// Or use PostOrders with PostOnly field
+args := []polymarket.PostOrdersArgs{
+    {Order: signedOrder1, OrderType: polymarket.OrderTypeGTC, PostOnly: true},
+    {Order: signedOrder2, OrderType: polymarket.OrderTypeGTD, PostOnly: true},
+}
+result, err := client.PostOrders(args)
+```
+
+**Note**: Post Only is only valid for `GTC` and `GTD` order types.
+
+### Heartbeat API
+
+The Heartbeat API allows you to automatically cancel all orders if your connection is lost. Once started, you must send a heartbeat every 10 seconds or all orders will be cancelled.
+
+```go
+// Start heartbeat with an optional ID
+heartbeatID := "my-session-123"
+result, err := client.PostHeartbeat(&heartbeatID)
+
+// Or send without ID
+result, err := client.PostHeartbeat(nil)
+```
+
+**Use Case**: Prevent stale orders when your trading system goes offline unexpectedly.
+
 ## Web3 Clients
 
 The SDK includes two Web3 clients for on-chain operations:
@@ -320,12 +353,13 @@ polymarket/
 - [x] **Last Trade Price**: `GetLastTradePrice()`, `GetLastTradesPrices()`
 
 ### ✅ Order Management
-- [x] **Order Submission**: `PostOrder()`, `PostOrders()`
+- [x] **Order Submission**: `PostOrder()`, `PostOrders()`, `PostOrderWithOptions()` (with PostOnly support)
 - [x] **Order Cancellation**: `Cancel()`, `CancelOrders()`, `CancelAll()`, `CancelMarketOrders()`
 - [x] **Order Query**: `GetOrders()`, `GetOrder()`
 - [x] **Trade Query**: `GetTrades()`
 - [x] **Balance Query**: `GetBalanceAllowance()`
 - [x] **Notification Management**: `GetNotifications()`, `DropNotifications()`
+- [x] **Heartbeat**: `PostHeartbeat()` - Keep orders alive (auto-cancel after 10s without heartbeat)
 
 ### ✅ Order Building and Creation
 - [x] Complete order builder implementation (using go-order-utils)
@@ -341,6 +375,16 @@ polymarket/
 
 ### ✅ RFQ Client Features
 - [x] `CreateRfqRequest()` - Create RFQ request
+- [x] `CancelRfqRequest()` - Cancel RFQ request
+- [x] `GetRfqRequests()` - Get RFQ request list
+- [x] `CreateRfqQuote()` - Create RFQ quote
+- [x] `CancelRfqQuote()` - Cancel RFQ quote
+- [x] `GetRfqRequesterQuotes()` - Get quotes on your requests (requester view)
+- [x] `GetRfqQuoterQuotes()` - Get quotes you created (quoter view)
+- [x] `GetRfqBestQuote()` - Get best RFQ quote
+- [x] `AcceptQuote()` - Accept quote (requester side)
+- [x] `ApproveOrder()` - Approve order (quoter side)
+- [x] `GetRfqConfig()` - Get RFQ configuration
 
 ### ✅ Web3 Client Features
 - [x] `PolymarketWeb3Client` - On-chain transactions (pays gas)
@@ -353,15 +397,6 @@ polymarket/
   - [x] Supports PolyProxy and Safe wallets
   - [x] Same operations as Web3Client without gas fees
   - [x] **Requires Builder credentials** (obtained from Polymarket)
-- [x] `CancelRfqRequest()` - Cancel RFQ request
-- [x] `GetRfqRequests()` - Get RFQ request list
-- [x] `CreateRfqQuote()` - Create RFQ quote
-- [x] `CancelRfqQuote()` - Cancel RFQ quote
-- [x] `GetRfqQuotes()` - Get RFQ quote list
-- [x] `GetRfqBestQuote()` - Get best RFQ quote
-- [x] `AcceptQuote()` - Accept quote
-- [x] `ApproveOrder()` - Approve order
-- [x] `GetRfqConfig()` - Get RFQ configuration
 
 ### ✅ Other Features
 - [x] Order scoring: `IsOrderScoring()`, `AreOrdersScoring()`

@@ -30,3 +30,4 @@ Thumbs.db
 
 examples_local
 ref/
+.cursor/

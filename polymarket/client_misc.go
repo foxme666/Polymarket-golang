@@ -72,9 +72,9 @@ func (c *ClobClient) DeleteReadonlyAPIKey(key string) (interface{}, error) {
 	bodyStr := string(bodyJSON)
 
 	requestArgs := &RequestArgs{
-		Method:        "DELETE",
-		RequestPath:   DeleteReadonlyAPIKey,
-		Body:          body,
+		Method:         "DELETE",
+		RequestPath:    DeleteReadonlyAPIKey,
+		Body:           body,
 		SerializedBody: &bodyStr,
 	}
 
@@ -128,9 +128,9 @@ func (c *ClobClient) AreOrdersScoring(params *OrdersScoringParams) (interface{},
 	bodyStr := string(bodyJSON)
 
 	requestArgs := &RequestArgs{
-		Method:        "POST",
-		RequestPath:   AreOrdersScoring,
-		Body:          params.OrderIDs,
+		Method:         "POST",
+		RequestPath:    AreOrdersScoring,
+		Body:           params.OrderIDs,
 		SerializedBody: &bodyStr,
 	}
 
@@ -278,3 +278,32 @@ func (c *ClobClient) GetBuilderTrades(params *TradeParams, nextCursor string) ([
 	return results, nil
 }
 
+// PostHeartbeat 发送心跳
+// 如果心跳启动后10秒内没有发送心跳，所有订单将被取消
+// 需要L2认证
+func (c *ClobClient) PostHeartbeat(heartbeatID *string) (interface{}, error) {
+	if err := c.assertLevel2Auth(); err != nil {
+		return nil, err
+	}
+
+	body := map[string]interface{}{"heartbeat_id": heartbeatID}
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal heartbeat: %w", err)
+	}
+	bodyStr := string(bodyJSON)
+
+	requestArgs := &RequestArgs{
+		Method:         "POST",
+		RequestPath:    PostHeartbeat,
+		Body:           body,
+		SerializedBody: &bodyStr,
+	}
+
+	headers, err := CreateLevel2Headers(c.signer, c.creds, requestArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.httpClient.Post(PostHeartbeat, headers, bodyStr)
+}

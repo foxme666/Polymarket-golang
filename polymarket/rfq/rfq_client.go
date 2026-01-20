@@ -160,14 +160,22 @@ func (r *RfqClient) CancelRfqQuote(params *CancelRfqQuoteParams) (interface{}, e
 	return r.parent.GetHTTPClient().Delete("/rfq/quote", headers, params)
 }
 
-// GetRfqQuotes 获取RFQ报价列表
+// GetRfqQuotes 获取RFQ报价列表（旧接口，建议使用 GetRfqRequesterQuotes 或 GetRfqQuoterQuotes）
+// Deprecated: 使用 GetRfqRequesterQuotes 或 GetRfqQuoterQuotes
 func (r *RfqClient) GetRfqQuotes(params *GetRfqQuotesParams) (interface{}, error) {
+	// 默认使用 requester 视角
+	return r.GetRfqRequesterQuotes(params)
+}
+
+// GetRfqRequesterQuotes 获取针对自己请求的报价列表（请求方视角）
+// 返回别人对你的 RFQ 请求做出的报价
+func (r *RfqClient) GetRfqRequesterQuotes(params *GetRfqQuotesParams) (interface{}, error) {
 	if err := r.ensureL2Auth(); err != nil {
 		return nil, err
 	}
 
 	// 构建查询参数
-	path := "/rfq/data/quotes"
+	path := "/rfq/data/requester/quotes"
 	if params != nil {
 		path += "?"
 		if params.RequestID != "" {
@@ -182,13 +190,61 @@ func (r *RfqClient) GetRfqQuotes(params *GetRfqQuotesParams) (interface{}, error
 		if params.Status != "" {
 			path += fmt.Sprintf("status=%s&", params.Status)
 		}
+		if len(params.QuoteIDs) > 0 {
+			for _, qid := range params.QuoteIDs {
+				path += fmt.Sprintf("quoteIds=%s&", qid)
+			}
+		}
 		// 移除末尾的&
 		if len(path) > 0 && path[len(path)-1] == '&' {
 			path = path[:len(path)-1]
 		}
 	}
 
-	headers, err := r.getL2Headers("GET", "/rfq/data/quotes", nil)
+	headers, err := r.getL2Headers("GET", "/rfq/data/requester/quotes", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	httpClient := r.parent.GetHTTPClient()
+	return httpClient.Get(path, headers)
+}
+
+// GetRfqQuoterQuotes 获取自己创建的报价列表（报价方视角）
+// 返回你对别人 RFQ 请求做出的报价
+func (r *RfqClient) GetRfqQuoterQuotes(params *GetRfqQuotesParams) (interface{}, error) {
+	if err := r.ensureL2Auth(); err != nil {
+		return nil, err
+	}
+
+	// 构建查询参数
+	path := "/rfq/data/quoter/quotes"
+	if params != nil {
+		path += "?"
+		if params.RequestID != "" {
+			path += fmt.Sprintf("request_id=%s&", params.RequestID)
+		}
+		if params.TokenID != "" {
+			path += fmt.Sprintf("token_id=%s&", params.TokenID)
+		}
+		if params.Side != "" {
+			path += fmt.Sprintf("side=%s&", params.Side)
+		}
+		if params.Status != "" {
+			path += fmt.Sprintf("status=%s&", params.Status)
+		}
+		if len(params.QuoteIDs) > 0 {
+			for _, qid := range params.QuoteIDs {
+				path += fmt.Sprintf("quoteIds=%s&", qid)
+			}
+		}
+		// 移除末尾的&
+		if len(path) > 0 && path[len(path)-1] == '&' {
+			path = path[:len(path)-1]
+		}
+	}
+
+	headers, err := r.getL2Headers("GET", "/rfq/data/quoter/quotes", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -222,9 +278,9 @@ func (r *RfqClient) AcceptQuote(params *AcceptQuoteParams) (interface{}, error) 
 		return nil, err
 	}
 
-	// 步骤1: 获取报价详情
-	quotesResp, err := r.GetRfqQuotes(&GetRfqQuotesParams{
-		RequestID: params.RequestID,
+	// 步骤1: 获取报价详情（使用 requester 视角）
+	quotesResp, err := r.GetRfqRequesterQuotes(&GetRfqQuotesParams{
+		QuoteIDs: []string{params.QuoteID},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get RFQ quotes: %w", err)
@@ -316,9 +372,9 @@ func (r *RfqClient) ApproveOrder(params *ApproveOrderParams) (interface{}, error
 		return nil, err
 	}
 
-	// 步骤1: 获取报价详情
-	quotesResp, err := r.GetRfqQuotes(&GetRfqQuotesParams{
-		RequestID: params.RequestID,
+	// 步骤1: 获取报价详情（使用 quoter 视角）
+	quotesResp, err := r.GetRfqQuoterQuotes(&GetRfqQuotesParams{
+		QuoteIDs: []string{params.QuoteID},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get RFQ quotes: %w", err)
