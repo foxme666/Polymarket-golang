@@ -391,12 +391,14 @@ polymarket/
   - [x] 支持 EOA、PolyProxy 和 Safe 钱包
   - [x] 余额查询（POL、USDC、条件代币）
   - [x] 授权管理 (`SetAllApprovals()`)
-  - [x] 头寸操作 (`SplitPosition()`, `MergePosition()`, `RedeemPosition()`, `ConvertPositions()`)
+  - [x] 头寸操作 (`SplitPosition()`, `MergePosition()`, `RedeemPosition()`, `RedeemPositions()`, `ConvertPositions()`)
   - [x] 代币转账 (`TransferUSDC()`, `TransferToken()`)
 - [x] `PolymarketGaslessWeb3Client` - 无 gas 交易（通过中继器）
   - [x] 支持 PolyProxy 和 Safe 钱包
   - [x] 与 Web3Client 相同的操作，无需支付 gas
   - [x] **需要 Builder 凭证**（从 Polymarket 获取）
+  - [x] **动态 Relay 地址**：自动从 `/relay-payload` 端点获取当前中继节点地址
+  - [x] **批量赎回**: `RedeemPositions()` - 单次交易赎回多个 conditionId
 
 ### ✅ 其他功能
 - [x] 订单评分：`IsOrderScoring()`, `AreOrdersScoring()`
@@ -447,6 +449,37 @@ polymarket/
 - `PRINT_API_CREDS` (可选): 设为 `1` 时输出新生成的 API 凭证
 - `DEBUG_HEADERS` (可选): 设为 `1` 时输出认证头（已脱敏）
 - `DEBUG_HEADERS_FULL` (可选): 设为 `1` 时输出完整认证头
+
+## 更新日志
+
+### v0.2.5 (2026-01-24)
+
+#### 新功能
+
+- **统一批量赎回 (Unified Batch Redeem)** - 在有 Gas 和无 Gas 客户端中均支持单笔交易赎回多个 conditionId
+  - 更新了 `RedeemPositions(requests []RedeemRequest)` 以支持 `PolyProxy` 链上单笔打包（此前为串行）
+  - 统一了 `PolymarketWeb3Client` 和 `PolymarketGaslessWeb3Client` 之间的 API
+  - 新增 `ExecuteBatch` 方法用于链上通用的多调用执行
+  - 在 `examples/gasless_batch_redeem` 中新增自动发现并赎回的示例
+  - 大幅降低了大批量头寸管理时的 Gas 成本和交易等待时间
+
+### v0.2.3 (2026-01-24)
+
+#### Bug 修复
+
+- **Gasless Web3 客户端 - 修复签名验证失败问题**
+  - 修复 `SignatureParams.relay` 使用 `/relay-payload` 端点返回的动态中继地址
+  - 之前签名使用动态中继地址，而 `SignatureParams.relay` 使用静态配置地址，导致签名验证失败
+  - 撤销了错误的 `to = ProxyFactoryAddress` 改动，该改动导致 `ProxyCall.To` 目标地址错误
+  - 现在签名生成和请求参数都使用一致的动态中继地址
+
+### v0.2.1 (2026-01-24)
+
+#### 改进
+
+- **Gasless Web3 客户端 - 动态 Relay 地址**
+  - 新增 `getRelayPayload()` 方法，从 `/relay-payload` 端点获取动态中继节点地址
+  - Polymarket 的中继服务可能会动态分配不同的中继器节点，现在代码会实时获取当前应该使用的 Relay 地址
 
 ## 参考
 

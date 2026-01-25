@@ -391,12 +391,14 @@ polymarket/
   - [x] Supports EOA, PolyProxy, and Safe wallets
   - [x] Balance queries (POL, USDC, conditional tokens)
   - [x] Approval management (`SetAllApprovals()`)
-  - [x] Position operations (`SplitPosition()`, `MergePosition()`, `RedeemPosition()`, `ConvertPositions()`)
+  - [x] Position operations (`SplitPosition()`, `MergePosition()`, `RedeemPosition()`, `RedeemPositions()`, `ConvertPositions()`)
   - [x] Token transfers (`TransferUSDC()`, `TransferToken()`)
 - [x] `PolymarketGaslessWeb3Client` - Gasless transactions via relay
   - [x] Supports PolyProxy and Safe wallets
   - [x] Same operations as Web3Client without gas fees
   - [x] **Requires Builder credentials** (obtained from Polymarket)
+  - [x] **Dynamic Relay Address**: Automatically fetches the current relay node address from `/relay-payload` endpoint
+  - [x] **Batch Redeem**: `RedeemPositions()` - Redeem multiple conditionIds in a single transaction
 
 ### ✅ Other Features
 - [x] Order scoring: `IsOrderScoring()`, `AreOrdersScoring()`
@@ -447,6 +449,39 @@ The example programs use the following environment variables:
 - `PRINT_API_CREDS` (optional): Set to `1` to print newly created API credentials
 - `DEBUG_HEADERS` (optional): Set to `1` to log auth headers (redacted)
 - `DEBUG_HEADERS_FULL` (optional): Set to `1` to log full auth headers
+
+## Changelog
+
+### v0.2.5 (2026-01-24)
+
+#### New Features
+
+- **Unified Batch Redeem** - Single transaction redemption for multiple conditionIds in both Gas and Gasless clients
+  - Updated `RedeemPositions(requests []RedeemRequest)` to support single-transaction batching for `PolyProxy` on-chain (previously only serial)
+  - Synced API between `PolymarketWeb3Client` and `PolymarketGaslessWeb3Client`
+  - Added `ExecuteBatch` for generic multi-call execution on-chain
+  - Added auto-discovery example in `examples/gasless_batch_redeem`
+  - Dramatically reduces Gas costs and transaction time for large portfolios
+
+### v0.2.3 (2026-01-24)
+
+#### Bug Fixes
+
+- **Gasless Web3 Client - Fixed Invalid Signature Error**
+  - Fixed `SignatureParams.relay` to use the dynamic relay address from `/relay-payload` endpoint
+  - Previously, the signature used a dynamic relay address while `SignatureParams.relay` used a static configured address, causing signature validation failures
+  - Reverted incorrect `to = ProxyFactoryAddress` change that was breaking `ProxyCall.To` target address
+  - Now both signature generation and request parameters use consistent dynamic relay address
+
+### v0.2.1 (2026-01-24)
+
+#### Improvements
+
+- **Gasless Web3 Client - Dynamic Relay Address**
+  - Added `getRelayPayload()` method to fetch dynamic relay node address from `/relay-payload` endpoint
+  - Polymarket's relay service may dynamically assign different relay nodes; the code now fetches the current relay address in real-time
+
+
 
 ## References
 

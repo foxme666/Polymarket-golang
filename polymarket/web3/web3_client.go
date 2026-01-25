@@ -508,3 +508,117 @@ func (c *PolymarketWeb3Client) TransferToken(tokenID string, recipient common.Ad
 	}
 	return c.Execute(to, data, "Token Transfer")
 }
+
+// RedeemPositions 批量赎回多个头寸
+// 对于 PolyProxy 钱包，这将在单次链上交易中执行所有赎回操作
+func (c *PolymarketWeb3Client) RedeemPositions(requests []RedeemRequest) (*TransactionReceipt, error) {
+	if len(requests) == 0 {
+		return nil, fmt.Errorf("no redeem requests provided")
+	}
+
+	// 仅 PolyProxy 支持高效打包执行
+	if c.signatureType == SignatureTypePolyProxy {
+		calls := make([]ProxyCall, 0, len(requests))
+		for _, req := range requests {
+			var to common.Address
+			var data []byte
+			var err error
+
+			if req.NegRisk {
+				to = NegRiskAdapterAddress
+				intAmounts := make([]*big.Int, len(req.Amounts))
+				for i, amt := range req.Amounts {
+					intAmounts[i] = ToWei(amt, 6)
+				}
+				data, err = NegRiskAdapterABI.Pack("redeemPositions", req.ConditionID, intAmounts)
+			} else {
+				to = c.ConditionalTokensAddress
+				data, err = ConditionalTokensABI.Pack("redeemPositions", c.USDCAddress, HashZero, req.ConditionID, []*big.Int{big.NewInt(1), big.NewInt(2)})
+			}
+			if err != nil {
+				return nil, fmt.Errorf("failed to encode redeem for condition %s: %w", req.ConditionID.Hex(), err)
+			}
+
+			calls = append(calls, ProxyCall{
+				TypeCode: 1,
+				To:       to,
+				Value:    big.NewInt(0),
+				Data:     data,
+			})
+		}
+		return c.ExecuteBatch(calls, "Batch Redeem Positions")
+	}
+
+	// 对于非打包支持的钱包类型（如 EOA），退回到串行执行
+	var lastReceipt *TransactionReceipt
+	for _, req := range requests {
+		r, err := c.RedeemPosition(req.ConditionID, req.Amounts, req.NegRisk)
+		if err != nil {
+			return lastReceipt, err
+		}
+		lastReceipt = r
+	}
+	return lastReceipt, nil
+}
+
+// ExecuteBatch 执行批量链上交易
+func (c *PolymarketWeb3Client) ExecuteBatch(calls []ProxyCall, operationName string) (*TransactionReceipt, error) {
+	var tx *types.Transaction
+	var err error
+
+	switch c.signatureType {
+	case SignatureTypePolyProxy:
+		tx, err = c.buildBatchProxyTransaction(calls)
+	default:
+		return nil, fmt.Errorf("batch execution only supported for PolyProxy signature type on-chain")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return c.executeTransaction(tx, operationName)
+}
+
+// buildBatchProxyTransaction 构建批量 Poly 代理钱包交易
+func (c *PolymarketWeb3Client) buildBatchProxyTransaction(calls []ProxyCall) (*types.Transaction, error) {
+	nonce, err := c.client.PendingNonceAt(context.Background(), c.account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nonce: %w", err)
+	}
+
+	gasPrice, err := c.client.SuggestGasPrice(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get gas price: %w", err)
+	}
+	adjustedGasPrice := new(big.Int).Mul(gasPrice, big.NewInt(110)) // 批量交易适当提高气价稳定性
+	adjustedGasPrice.Div(adjustedGasPrice, big.NewInt(100))
+
+	proxyData, err := ProxyFactoryABI.Pack("proxy", calls)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode batch proxy transaction: %w", err)
+	}
+
+	// 估算gas
+	gas, err := c.client.EstimateGas(context.Background(), ethereum.CallMsg{
+		From: c.account,
+		To:   &c.ProxyFactoryAddress,
+		Data: proxyData,
+	})
+	if err != nil {
+		gas = 15000000 // 默认大的 gas limit
+	} else {
+		gas = uint64(float64(gas)*1.2) + 100000
+	}
+
+	tx := types.NewTx(&types.LegacyTx{
+		Nonce:    nonce,
+		GasPrice: adjustedGasPrice,
+		Gas:      gas,
+		To:       &c.ProxyFactoryAddress,
+		Value:    big.NewInt(0),
+		Data:     proxyData,
+	})
+
+	return types.SignTx(tx, types.NewEIP155Signer(big.NewInt(c.chainID)), c.privateKey)
+}

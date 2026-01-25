@@ -67,6 +67,8 @@ func (c *PolymarketGaslessWeb3Client) Execute(to common.Address, data []byte, op
 
 	switch c.signatureType {
 	case SignatureTypePolyProxy:
+		// 原始 to 地址会被包装在 ProxyCall 中
+		// ProxyFactoryAddress 只在签名结构和请求中使用
 		body, err = c.buildProxyRelayTransaction(to, data, metadata)
 	case SignatureTypeSafe:
 		body, err = c.buildSafeRelayTransaction(to, data, metadata)
@@ -142,9 +144,42 @@ func (c *PolymarketGaslessWeb3Client) getRelayNonce(walletType string) (int, err
 	return nonce, nil
 }
 
+// getRelayPayload 获取中继负载信息（包含动态 Relay 地址和 nonce）
+// 这个方法调用 /relay-payload 端点，返回当前应该使用的 Relay 节点地址和 nonce
+func (c *PolymarketGaslessWeb3Client) getRelayPayload(walletType string) (relayAddress string, nonce int, err error) {
+	url := fmt.Sprintf("%s/relay-payload?address=%s&type=%s", c.relayConfig.RelayURL, c.GetBaseAddress().Hex(), walletType)
+
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to get relay payload: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", 0, fmt.Errorf("failed to get relay payload: %s", string(body))
+	}
+
+	var result struct {
+		Address string `json:"address"`
+		Nonce   string `json:"nonce"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", 0, fmt.Errorf("failed to decode relay payload response: %w", err)
+	}
+
+	nonceInt, err := strconv.Atoi(result.Nonce)
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid nonce value: %w", err)
+	}
+
+	return result.Address, nonceInt, nil
+}
+
 // buildProxyRelayTransaction 构建Proxy中继交易
 func (c *PolymarketGaslessWeb3Client) buildProxyRelayTransaction(to common.Address, data []byte, metadata string) (*RelaySubmitRequest, error) {
-	proxyNonce, err := c.getRelayNonce("PROXY")
+	// 使用 getRelayPayload 获取动态 Relay 地址和 nonce
+	relayAddress, proxyNonce, err := c.getRelayPayload("PROXY")
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +225,7 @@ func (c *PolymarketGaslessWeb3Client) buildProxyRelayTransaction(to common.Addre
 		gasLimit,
 		strconv.Itoa(proxyNonce),
 		c.relayConfig.RelayHub,
-		c.relayConfig.RelayAddress,
+		relayAddress, // 使用动态获取的 Relay 地址
 	)
 
 	structHash := Keccak256Hash(structBytes)
@@ -224,7 +259,7 @@ func (c *PolymarketGaslessWeb3Client) buildProxyRelayTransaction(to common.Addre
 			"gasLimit":   gasLimit,
 			"relayerFee": relayerFee,
 			"relayHub":   c.relayConfig.RelayHub,
-			"relay":      c.relayConfig.RelayAddress,
+			"relay":      relayAddress, // 使用动态获取的 Relay 地址（与签名保持一致）
 		},
 		To:   c.ProxyFactoryAddress.Hex(),
 		Type: "PROXY",
@@ -504,3 +539,182 @@ func (c *PolymarketGaslessWeb3Client) ConvertPositions(questionIDs []string, amo
 	return c.Execute(to, data, "Convert Positions", "convert")
 }
 
+// RedeemRequest 赎回请求
+type RedeemRequest struct {
+	ConditionID common.Hash
+	Amounts     []float64
+	NegRisk     bool
+}
+
+// RedeemPositions 批量赎回多个头寸（单次 gasless 交易）
+// 将多个赎回操作打包到同一个 proxy(calls) 调用中
+func (c *PolymarketGaslessWeb3Client) RedeemPositions(requests []RedeemRequest) (*TransactionReceipt, error) {
+	if len(requests) == 0 {
+		return nil, fmt.Errorf("no redeem requests provided")
+	}
+
+	// 构建多个 ProxyCall
+	calls := make([]ProxyCall, 0, len(requests))
+
+	for _, req := range requests {
+		var to common.Address
+		var data []byte
+		var err error
+
+		if req.NegRisk {
+			to = NegRiskAdapterAddress
+			intAmounts := make([]*big.Int, len(req.Amounts))
+			for i, amt := range req.Amounts {
+				intAmounts[i] = ToWei(amt, 6)
+			}
+			data, err = NegRiskAdapterABI.Pack("redeemPositions", req.ConditionID, intAmounts)
+		} else {
+			to = c.ConditionalTokensAddress
+			data, err = ConditionalTokensABI.Pack("redeemPositions", c.USDCAddress, HashZero, req.ConditionID, []*big.Int{big.NewInt(1), big.NewInt(2)})
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode redeem for condition %s: %w", req.ConditionID.Hex(), err)
+		}
+
+		calls = append(calls, ProxyCall{
+			TypeCode: 1,
+			To:       to,
+			Value:    big.NewInt(0),
+			Data:     data,
+		})
+	}
+
+	return c.ExecuteBatch(calls, "Batch Redeem Positions", "batch_redeem")
+}
+
+// ExecuteBatch 通过无gas中继执行批量交易
+func (c *PolymarketGaslessWeb3Client) ExecuteBatch(calls []ProxyCall, operationName string, metadata string) (*TransactionReceipt, error) {
+	var body *RelaySubmitRequest
+	var err error
+
+	switch c.signatureType {
+	case SignatureTypePolyProxy:
+		body, err = c.buildBatchProxyRelayTransaction(calls, metadata)
+	default:
+		return nil, fmt.Errorf("batch execution only supports PolyProxy signature type")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// 获取headers
+	headers, err := c.getRelayHeaders(body)
+	if err != nil {
+		return nil, err
+	}
+
+	// 提交到中继
+	resp, err := c.submitToRelay(body, headers)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("Gasless batch txn submitted: %s\n", resp.TransactionHash)
+	fmt.Printf("Transaction ID: %s\n", resp.TransactionID)
+	fmt.Printf("State: %s\n", resp.State)
+
+	// 等待确认
+	if resp.TransactionHash != "" {
+		receipt, err := c.waitForReceipt(common.HexToHash(resp.TransactionHash))
+		if err != nil {
+			return nil, err
+		}
+
+		if receipt.Status == 1 {
+			fmt.Printf("%s succeeded\n", operationName)
+		} else {
+			fmt.Printf("%s failed\n", operationName)
+		}
+
+		return receipt, nil
+	}
+
+	return nil, fmt.Errorf("no transaction hash in response: %+v", resp)
+}
+
+// buildBatchProxyRelayTransaction 构建批量Proxy中继交易
+func (c *PolymarketGaslessWeb3Client) buildBatchProxyRelayTransaction(calls []ProxyCall, metadata string) (*RelaySubmitRequest, error) {
+	// 使用 getRelayPayload 获取动态 Relay 地址和 nonce
+	relayAddress, proxyNonce, err := c.getRelayPayload("PROXY")
+	if err != nil {
+		return nil, err
+	}
+
+	gasPrice := "0"
+	relayerFee := "0"
+
+	// 编码代理交易 - 使用传入的 calls 数组
+	proxyData, err := ProxyFactoryABI.Pack("proxy", calls)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode batch proxy transaction: %w", err)
+	}
+	encodedTxnHex := "0x" + common.Bytes2Hex(proxyData)
+
+	// 估算gas（使用更大的默认值，因为是批量操作）
+	var gasLimit string
+	gas, err := c.client.EstimateGas(context.Background(), ethereum.CallMsg{
+		From: c.GetBaseAddress(),
+		To:   &c.ProxyFactoryAddress,
+		Data: proxyData,
+	})
+	if err != nil {
+		gasLimit = "15000000" // 批量操作使用更高的默认 gas limit
+	} else {
+		gasLimit = strconv.FormatUint(uint64(float64(gas)*1.5)+200000, 10)
+	}
+
+	// 创建签名结构
+	structBytes := CreateProxyStruct(
+		c.GetBaseAddress().Hex(),
+		c.ProxyFactoryAddress.Hex(),
+		encodedTxnHex,
+		relayerFee,
+		gasPrice,
+		gasLimit,
+		strconv.Itoa(proxyNonce),
+		c.relayConfig.RelayHub,
+		relayAddress,
+	)
+
+	structHash := Keccak256Hash(structBytes)
+
+	// 签名（eth_sign风格）
+	prefixedHash := crypto.Keccak256(append([]byte("\x19Ethereum Signed Message:\n32"), common.FromHex(structHash)...))
+	sig, err := crypto.Sign(prefixedHash, c.privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign: %w", err)
+	}
+	// 调整v值
+	if sig[64] < 27 {
+		sig[64] += 27
+	}
+	signature := "0x" + common.Bytes2Hex(sig)
+
+	proxyWalletAddr, err := c.GetPolyProxyAddress(c.account)
+	if err != nil {
+		return nil, err
+	}
+
+	return &RelaySubmitRequest{
+		Data:        encodedTxnHex,
+		From:        c.GetBaseAddress().Hex(),
+		Metadata:    metadata,
+		Nonce:       strconv.Itoa(proxyNonce),
+		ProxyWallet: proxyWalletAddr.Hex(),
+		Signature:   signature,
+		SignatureParams: map[string]interface{}{
+			"gasPrice":   gasPrice,
+			"gasLimit":   gasLimit,
+			"relayerFee": relayerFee,
+			"relayHub":   c.relayConfig.RelayHub,
+			"relay":      relayAddress,
+		},
+		To:   c.ProxyFactoryAddress.Hex(),
+		Type: "PROXY",
+	}, nil
+}
