@@ -339,10 +339,7 @@ func (c *PolymarketGaslessWeb3Client) getSafeTransactionHash(to common.Address, 
 		return nil, err
 	}
 
-	result, err := c.client.CallContract(context.Background(), ethereum.CallMsg{
-		To:   &c.Address,
-		Data: txHashData,
-	}, nil)
+	result, err := c.callContract(context.Background(), &c.Address, txHashData)
 	if err != nil {
 		return nil, err
 	}

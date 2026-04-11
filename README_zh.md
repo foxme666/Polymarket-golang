@@ -452,6 +452,18 @@ polymarket/
 
 ## 更新日志
 
+### v0.2.7 (2026-03-14)
+
+#### Bug 修复
+
+- **修复 Polygon Bor v2.6.0 `eth_call` 兼容性问题** - 使用原始 `eth_call` RPC 配合 `blockOverrides`（`baseFeePerGas: 0`）绕过 baseFee 校验
+  - Bor v2.6.0（[公告](https://forum.polygon.technology/t/bor-v2-6-0-and-erigon-v3-4-0-for-mainnet-and-amoy/21757)）同步了上游 go-ethereum 的 `eth_call` 校验逻辑，节点现在会拒绝 `maxFeePerGas` 低于 `baseFee` 的调用
+  - Bor 节点的 `setDefaults` 会注入冲突的 gas 字段，无法通过 `CallMsg` 的 gas 参数解决（设置 `GasFeeCap`/`GasTipCap` 导致 "both gasPrice and maxFeePerGas specified"；设置 `GasPrice` 会被忽略）
+  - 修复方案：将所有 `ethclient.CallContract` 替换为原始 `rpc.Client.CallContext` 的 `eth_call`，通过第 4 个参数 `blockOverrides: {"baseFeePerGas": "0x0"}` 将区块上下文的 baseFee 设为 0，从而在 gas 校验前绕过限制
+  - `estimateGas` 调用移除了 gas 字段，所有调用点均有 fallback gas limit
+  - 仅影响只读合约调用，真实交易的 gas price 不受影响
+  - 此问题影响所有 Polygon RPC 提供商，非特定提供商问题
+
 ### v0.2.6 (2026-01-28)
 
 #### Bug 修复

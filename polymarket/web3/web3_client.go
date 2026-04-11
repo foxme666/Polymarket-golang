@@ -163,10 +163,7 @@ func (c *PolymarketWeb3Client) buildSafeTransaction(to common.Address, data []by
 		return nil, fmt.Errorf("failed to pack nonce call: %w", err)
 	}
 
-	result, err := c.client.CallContract(context.Background(), ethereum.CallMsg{
-		To:   &c.Address,
-		Data: safeNonceData,
-	}, nil)
+	result, err := c.callContract(context.Background(), &c.Address, safeNonceData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get safe nonce: %w", err)
 	}
@@ -254,10 +251,7 @@ func (c *PolymarketWeb3Client) getSafeTransactionHash(to common.Address, data []
 		return nil, err
 	}
 
-	result, err := c.client.CallContract(context.Background(), ethereum.CallMsg{
-		To:   &c.Address,
-		Data: txHashData,
-	}, nil)
+	result, err := c.callContract(context.Background(), &c.Address, txHashData)
 	if err != nil {
 		return nil, err
 	}

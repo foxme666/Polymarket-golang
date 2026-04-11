@@ -452,6 +452,18 @@ The example programs use the following environment variables:
 
 ## Changelog
 
+### v0.2.7 (2026-03-14)
+
+#### Bug Fixes
+
+- **Fixed Polygon Bor v2.6.0 `eth_call` Compatibility** - Use raw `eth_call` RPC with `blockOverrides` (`baseFeePerGas: 0`) to bypass baseFee validation
+  - Bor v2.6.0 ([announcement](https://forum.polygon.technology/t/bor-v2-6-0-and-erigon-v3-4-0-for-mainnet-and-amoy/21757)) synced upstream go-ethereum's `eth_call` validation logic; nodes now reject calls where `maxFeePerGas` is lower than `baseFee`
+  - The Bor node's `setDefaults` injects conflicting gas fields, making it impossible to fix via `CallMsg` gas parameters alone (setting `GasFeeCap`/`GasTipCap` causes "both gasPrice and maxFeePerGas specified"; setting `GasPrice` is ignored)
+  - Fix: replace all `ethclient.CallContract` with raw `rpc.Client.CallContext` `eth_call`, using the 4th parameter `blockOverrides: {"baseFeePerGas": "0x0"}` to set block context's baseFee to 0 before gas validation
+  - For `estimateGas`, gas fields are removed; all call sites have fallback gas limits
+  - This only affects read-only contract calls; real transaction gas price remains unchanged
+  - Affects all Polygon RPC providers, not provider-specific
+
 ### v0.2.6 (2026-01-28)
 
 #### Bug Fixes
