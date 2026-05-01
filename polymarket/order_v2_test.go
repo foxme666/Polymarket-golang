@@ -84,10 +84,16 @@ func TestOrderToJSONWithPostOnlyUsesV2WireShape(t *testing.T) {
 		t.Fatalf("order payload type = %T", payload["order"])
 	}
 
-	for _, removed := range []string{"taker", "nonce", "feeRateBps"} {
+	for _, removed := range []string{"nonce", "feeRateBps"} {
 		if _, exists := orderPayload[removed]; exists {
 			t.Fatalf("V2 order JSON must not contain %s", removed)
 		}
+	}
+	if orderPayload["salt"] != int64(12345) {
+		t.Fatalf("unexpected salt: %v (%T)", orderPayload["salt"], orderPayload["salt"])
+	}
+	if orderPayload["taker"] != "0x0000000000000000000000000000000000000000" {
+		t.Fatalf("unexpected taker: %v", orderPayload["taker"])
 	}
 	if orderPayload["timestamp"] != "1713398400000" {
 		t.Fatalf("unexpected timestamp: %v", orderPayload["timestamp"])
@@ -98,8 +104,11 @@ func TestOrderToJSONWithPostOnlyUsesV2WireShape(t *testing.T) {
 	if orderPayload["signature"] != "0x010203" {
 		t.Fatalf("unexpected signature: %v", orderPayload["signature"])
 	}
-	if _, exists := payload["postOnly"]; exists {
-		t.Fatalf("V2 default order payload must not contain postOnly=false")
+	if payload["deferExec"] != false {
+		t.Fatalf("unexpected deferExec: %v", payload["deferExec"])
+	}
+	if payload["postOnly"] != false {
+		t.Fatalf("unexpected default postOnly: %v", payload["postOnly"])
 	}
 
 	postOnlyPayload := OrderToJSONWithPostOnly(order, "api-key", OrderTypeGTC, true)

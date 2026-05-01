@@ -89,9 +89,10 @@ func OrderToJSONWithPostOnly(order *SignedOrder, owner string, orderType OrderTy
 	}
 
 	orderDict := map[string]interface{}{
-		"salt":          order.Salt.String(),
+		"salt":          order.Salt.Int64(),
 		"maker":         order.Maker.Hex(),
 		"signer":        order.Signer.Hex(),
+		"taker":         order.Taker.Hex(),
 		"tokenId":       order.TokenId.String(),
 		"makerAmount":   order.MakerAmount.String(),
 		"takerAmount":   order.TakerAmount.String(),
@@ -104,12 +105,11 @@ func OrderToJSONWithPostOnly(order *SignedOrder, owner string, orderType OrderTy
 		"signature":     signatureHex,
 	}
 	payload := map[string]interface{}{
+		"deferExec": false,
+		"postOnly":  postOnly,
 		"order":     orderDict,
 		"owner":     owner,
 		"orderType": string(orderType),
-	}
-	if postOnly {
-		payload["postOnly"] = true
 	}
 	return payload
 }
