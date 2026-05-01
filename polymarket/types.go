@@ -1,13 +1,15 @@
 package polymarket
 
 import (
-	"github.com/polymarket/go-order-utils/pkg/model"
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 // ApiCreds API凭证
 type ApiCreds struct {
-	APIKey     string `json:"apiKey"`
-	APISecret  string `json:"secret"`
+	APIKey        string `json:"apiKey"`
+	APISecret     string `json:"secret"`
 	APIPassphrase string `json:"passphrase"`
 }
 
@@ -18,9 +20,9 @@ type ReadonlyApiKeyResponse struct {
 
 // RequestArgs 请求参数
 type RequestArgs struct {
-	Method        string
-	RequestPath   string
-	Body          interface{}
+	Method         string
+	RequestPath    string
+	Body           interface{}
 	SerializedBody *string
 }
 
@@ -32,26 +34,32 @@ type BookParams struct {
 
 // OrderArgs 限价订单参数
 type OrderArgs struct {
-	TokenID     string  `json:"token_id"`      // 条件代币资产ID
+	TokenID     string  `json:"token_id"`     // 条件代币资产ID
 	Price       float64 `json:"price"`        // 订单价格
 	Size        float64 `json:"size"`         // 条件代币数量
 	Side        string  `json:"side"`         // BUY 或 SELL
-	FeeRateBps  int     `json:"fee_rate_bps"` // 手续费率（基点）
-	Nonce       int     `json:"nonce"`        // 用于链上取消的nonce
-	Expiration  int     `json:"expiration"`    // 订单过期时间戳
-	Taker       string  `json:"taker"`         // 订单接受者地址，零地址表示公开订单
+	FeeRateBps  int     `json:"fee_rate_bps"` // V2忽略：手续费由撮合时决定
+	Nonce       int     `json:"nonce"`        // V2忽略：订单唯一性由 timestamp 提供
+	Expiration  int     `json:"expiration"`   // POST body 过期时间，不参与 V2 签名
+	Taker       string  `json:"taker"`        // V2忽略：保留字段避免旧调用编译失败
+	Timestamp   int64   `json:"timestamp"`    // V2订单创建毫秒时间戳；0表示自动生成
+	Metadata    string  `json:"metadata"`     // V2 bytes32 metadata；空值为0x00...00
+	BuilderCode string  `json:"builder_code"` // V2 bytes32 builder code；空值为0x00...00
 }
 
 // MarketOrderArgs 市价订单参数
 type MarketOrderArgs struct {
-	TokenID     string    `json:"token_id"`      // 条件代币资产ID
+	TokenID     string    `json:"token_id"`     // 条件代币资产ID
 	Amount      float64   `json:"amount"`       // BUY: 美元金额, SELL: 份额数量
-	Side        string    `json:"side"`          // BUY 或 SELL
+	Side        string    `json:"side"`         // BUY 或 SELL
 	Price       float64   `json:"price"`        // 订单价格（可选）
-	FeeRateBps  int       `json:"fee_rate_bps"` // 手续费率（基点）
-	Nonce       int       `json:"nonce"`        // 用于链上取消的nonce
-	Taker       string    `json:"taker"`         // 订单接受者地址
+	FeeRateBps  int       `json:"fee_rate_bps"` // V2忽略：手续费由撮合时决定
+	Nonce       int       `json:"nonce"`        // V2忽略：订单唯一性由 timestamp 提供
+	Taker       string    `json:"taker"`        // V2忽略：保留字段避免旧调用编译失败
 	OrderType   OrderType `json:"order_type"`   // 订单类型
+	Timestamp   int64     `json:"timestamp"`    // V2订单创建毫秒时间戳；0表示自动生成
+	Metadata    string    `json:"metadata"`     // V2 bytes32 metadata；空值为0x00...00
+	BuilderCode string    `json:"builder_code"` // V2 bytes32 builder code；空值为0x00...00
 }
 
 // TradeParams 交易查询参数
@@ -84,15 +92,15 @@ type OrderSummary struct {
 
 // OrderBookSummary 订单簿摘要
 type OrderBookSummary struct {
-	Market        string         `json:"market"`
-	AssetID       string         `json:"asset_id"`
-	Timestamp     string         `json:"timestamp"`
-	Bids          []OrderSummary `json:"bids"`
-	Asks          []OrderSummary `json:"asks"`
-	MinOrderSize  string         `json:"min_order_size"`
-	NegRisk       bool           `json:"neg_risk"`
-	TickSize      string         `json:"tick_size"`
-	Hash          string         `json:"hash"`
+	Market       string         `json:"market"`
+	AssetID      string         `json:"asset_id"`
+	Timestamp    string         `json:"timestamp"`
+	Bids         []OrderSummary `json:"bids"`
+	Asks         []OrderSummary `json:"asks"`
+	MinOrderSize string         `json:"min_order_size"`
+	NegRisk      bool           `json:"neg_risk"`
+	TickSize     string         `json:"tick_size"`
+	Hash         string         `json:"hash"`
 }
 
 // AssetType 资产类型
@@ -114,6 +122,31 @@ type BalanceAllowanceParams struct {
 type BalanceAllowanceResponse struct {
 	Balance   string `json:"balance"`
 	Allowance string `json:"allowance"`
+}
+
+type ClobToken struct {
+	TokenID string `json:"t"`
+	Outcome string `json:"o"`
+}
+
+type ClobFeeDetails struct {
+	Rate      float64 `json:"r"`
+	Exponent  float64 `json:"e"`
+	TakerOnly bool    `json:"to"`
+}
+
+type ClobMarketInfo struct {
+	GameStartTime    interface{}            `json:"gst"`
+	Rewards          interface{}            `json:"r"`
+	Tokens           []ClobToken            `json:"t"`
+	MinimumOrderSize float64                `json:"mos"`
+	MinimumTickSize  float64                `json:"mts"`
+	MakerBaseFee     float64                `json:"mbf"`
+	TakerBaseFee     float64                `json:"tbf"`
+	NegRisk          bool                   `json:"nr"`
+	RFQEnabled       bool                   `json:"rfqe"`
+	FeeDetails       *ClobFeeDetails        `json:"fd"`
+	Raw              map[string]interface{} `json:"-"`
 }
 
 // OrderScoringParams 订单评分参数
@@ -149,20 +182,52 @@ type RoundConfig struct {
 
 // ContractConfig 合约配置
 type ContractConfig struct {
-	Exchange         string `json:"exchange"`          // 交易所合约地址
-	Collateral       string `json:"collateral"`         // 抵押品代币地址
+	Exchange          string `json:"exchange"`           // 交易所合约地址
+	Collateral        string `json:"collateral"`         // 抵押品代币地址
 	ConditionalTokens string `json:"conditional_tokens"` // 条件代币合约地址
 }
 
 // PostOrdersArgs 批量下单参数
 type PostOrdersArgs struct {
-	Order     *model.SignedOrder `json:"order"`
-	OrderType OrderType          `json:"orderType"`
-	PostOnly  bool               `json:"postOnly,omitempty"`
+	Order     *SignedOrder `json:"order"`
+	OrderType OrderType    `json:"orderType"`
+	PostOnly  bool         `json:"postOnly,omitempty"`
 }
 
-// SignedOrder 已签名的订单（包装go-order-utils的SignedOrder）
-type SignedOrder = model.SignedOrder
+// OrderDataV2 是 CLOB V2 EIP-712 签名所需的订单数据。
+type OrderDataV2 struct {
+	Maker         string
+	Signer        string
+	TokenID       string
+	MakerAmount   string
+	TakerAmount   string
+	Side          int
+	SignatureType int
+	Timestamp     int64
+	Metadata      string
+	Builder       string
+	Expiration    int
+}
+
+// SignedOrder 是 CLOB V2 已签名订单。Taker/Nonce/FeeRateBps 仅为旧 RFQ/调用兼容保留，不进入V2签名或下单JSON。
+type SignedOrder struct {
+	Salt          *big.Int
+	Maker         common.Address
+	Signer        common.Address
+	Taker         common.Address
+	TokenId       *big.Int
+	MakerAmount   *big.Int
+	TakerAmount   *big.Int
+	Expiration    *big.Int
+	Nonce         *big.Int
+	FeeRateBps    *big.Int
+	Side          *big.Int
+	SignatureType *big.Int
+	Timestamp     *big.Int
+	Metadata      common.Hash
+	Builder       common.Hash
+	Signature     []byte
+}
 
 // PostOrderResult 提交订单的结果，包含原始请求和响应
 type PostOrderResult struct {
@@ -175,4 +240,3 @@ type PostOrdersResult struct {
 	Payload  []map[string]interface{} `json:"payload"`  // 原始 POST 请求体
 	Response interface{}              `json:"response"` // API 响应
 }
-

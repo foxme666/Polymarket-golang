@@ -212,6 +212,85 @@ func (c *ClobClient) GetSpreads(params []BookParams) (interface{}, error) {
 	return c.httpClient.Post(GetSpreads, nil, body)
 }
 
+// GetClobMarketInfo 获取 CLOB V2 市场参数并缓存 token 级 tick size、neg risk 和 fee 信息。
+func (c *ClobClient) GetClobMarketInfo(conditionID string) (*ClobMarketInfo, error) {
+	resp, err := c.httpClient.Get(GetClobMarket+conditionID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	respMap, ok := resp.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid response format")
+	}
+
+	info, err := parseClobMarketInfo(conditionID, respMap)
+	if err != nil {
+		return nil, err
+	}
+	c.cacheClobMarketInfo(conditionID, info)
+
+	return info, nil
+}
+
+func parseClobMarketInfo(conditionID string, respMap map[string]interface{}) (*ClobMarketInfo, error) {
+	info := &ClobMarketInfo{
+		GameStartTime:    respMap["gst"],
+		Rewards:          respMap["r"],
+		MinimumOrderSize: getFloatFromMap(respMap, "mos"),
+		MinimumTickSize:  getFloatFromMap(respMap, "mts"),
+		MakerBaseFee:     getFloatFromMap(respMap, "mbf"),
+		TakerBaseFee:     getFloatFromMap(respMap, "tbf"),
+		NegRisk:          getBoolFromMap(respMap, "nr"),
+		RFQEnabled:       getBoolFromMap(respMap, "rfqe"),
+		Raw:              respMap,
+	}
+
+	if feeRaw, ok := respMap["fd"].(map[string]interface{}); ok {
+		info.FeeDetails = &ClobFeeDetails{
+			Rate:      getFloatFromMap(feeRaw, "r"),
+			Exponent:  getFloatFromMap(feeRaw, "e"),
+			TakerOnly: getBoolFromMap(feeRaw, "to"),
+		}
+	}
+
+	tokensRaw, ok := respMap["t"].([]interface{})
+	if !ok || len(tokensRaw) == 0 {
+		return nil, fmt.Errorf("failed to fetch market info for condition id %s", conditionID)
+	}
+
+	info.Tokens = make([]ClobToken, 0, len(tokensRaw))
+	for _, tokenRaw := range tokensRaw {
+		tokenMap, ok := tokenRaw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		token := ClobToken{
+			TokenID: getStringFromMap(tokenMap, "t"),
+			Outcome: getStringFromMap(tokenMap, "o"),
+		}
+		if token.TokenID == "" {
+			continue
+		}
+		info.Tokens = append(info.Tokens, token)
+	}
+
+	return info, nil
+}
+
+func (c *ClobClient) cacheClobMarketInfo(conditionID string, info *ClobMarketInfo) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, token := range info.Tokens {
+		c.tokenMarkets[token.TokenID] = conditionID
+		c.tickSizes[token.TokenID] = TickSize(fmt.Sprintf("%v", info.MinimumTickSize))
+		c.negRisk[token.TokenID] = info.NegRisk
+		if info.FeeDetails != nil {
+			c.feeInfos[token.TokenID] = *info.FeeDetails
+		}
+	}
+}
+
 // GetTickSize 获取tick size（带缓存）
 func (c *ClobClient) GetTickSize(tokenID string) (TickSize, error) {
 	c.mu.RLock()
@@ -382,4 +461,20 @@ func getBoolFromMap(m map[string]interface{}, key string) bool {
 		}
 	}
 	return false
+}
+
+func getFloatFromMap(m map[string]interface{}, key string) float64 {
+	if v, ok := m[key]; ok {
+		switch n := v.(type) {
+		case float64:
+			return n
+		case int:
+			return float64(n)
+		case string:
+			var out float64
+			_, _ = fmt.Sscanf(n, "%f", &out)
+			return out
+		}
+	}
+	return 0
 }

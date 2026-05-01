@@ -91,12 +91,8 @@ func (c *ClobClient) CreateOrder(orderArgs *OrderArgs, options *PartialCreateOrd
 			}
 		}
 
-		// 解析手续费率
-		feeRateBps, err := c.resolveFeeRate(orderArgs.TokenID, orderArgs.FeeRateBps)
-		if err != nil {
-			return nil, err
-		}
-		orderArgs.FeeRateBps = feeRateBps
+		// V2订单签名不再携带 feeRateBps；市场手续费由撮合时决定。
+		orderArgs.FeeRateBps = 0
 	}
 
 	// 验证价格
@@ -122,31 +118,25 @@ func (c *ClobClient) CreateOrder(orderArgs *OrderArgs, options *PartialCreateOrd
 		return nil, err
 	}
 
-	// 构建OrderData
-	taker := orderArgs.Taker
-	if taker == "" {
-		taker = ZeroAddress
-	}
-
-	orderData := &model.OrderData{
+	orderData := &OrderDataV2{
 		Maker:         c.builder.GetFunder(),
-		Taker:         taker,
-		TokenId:       orderArgs.TokenID,
+		TokenID:       orderArgs.TokenID,
 		MakerAmount:   makerAmount.String(),
 		TakerAmount:   takerAmount.String(),
 		Side:          side,
-		FeeRateBps:    strconv.Itoa(orderArgs.FeeRateBps),
-		Nonce:         strconv.Itoa(orderArgs.Nonce),
 		Signer:        c.signer.Address(),
-		Expiration:    strconv.Itoa(orderArgs.Expiration),
-		SignatureType: model.SignatureType(c.builder.GetSigType()),
+		SignatureType: c.builder.GetSigType(),
+		Timestamp:     orderArgs.Timestamp,
+		Metadata:      orderArgs.Metadata,
+		Builder:       orderArgs.BuilderCode,
+		Expiration:    orderArgs.Expiration,
 	}
 
 	// 获取合约配置
 	contractConfig := getContractConfig(c.chainID, negRisk)
 
 	// 构建并签名订单
-	signedOrder, err := c.builder.BuildSignedOrder(orderData, contractConfig.Exchange, c.chainID, negRisk)
+	signedOrder, err := buildSignedOrderV2(c.signer.privateKey, orderData, contractConfig.Exchange, c.chainID)
 	if err != nil {
 		return nil, err
 	}
@@ -197,12 +187,8 @@ func (c *ClobClient) CreateMarketOrder(orderArgs *MarketOrderArgs, options *Part
 		}
 	}
 
-	// 解析手续费率
-	feeRateBps, err := c.resolveFeeRate(orderArgs.TokenID, orderArgs.FeeRateBps)
-	if err != nil {
-		return nil, err
-	}
-	orderArgs.FeeRateBps = feeRateBps
+	// V2订单签名不再携带 feeRateBps；市场手续费由撮合时决定。
+	orderArgs.FeeRateBps = 0
 
 	// 获取舍入配置
 	roundConfig, ok := obuilder.RoundingConfig[string(tickSize)]
@@ -221,31 +207,25 @@ func (c *ClobClient) CreateMarketOrder(orderArgs *MarketOrderArgs, options *Part
 		return nil, err
 	}
 
-	// 构建OrderData
-	taker := orderArgs.Taker
-	if taker == "" {
-		taker = ZeroAddress
-	}
-
-	orderData := &model.OrderData{
+	orderData := &OrderDataV2{
 		Maker:         c.builder.GetFunder(),
-		Taker:         taker,
-		TokenId:       orderArgs.TokenID,
+		TokenID:       orderArgs.TokenID,
 		MakerAmount:   makerAmount.String(),
 		TakerAmount:   takerAmount.String(),
 		Side:          side,
-		FeeRateBps:    strconv.Itoa(orderArgs.FeeRateBps),
-		Nonce:         strconv.Itoa(orderArgs.Nonce),
 		Signer:        c.signer.Address(),
-		Expiration:    "0", // 市价订单无过期时间
-		SignatureType: model.SignatureType(c.builder.GetSigType()),
+		SignatureType: c.builder.GetSigType(),
+		Timestamp:     orderArgs.Timestamp,
+		Metadata:      orderArgs.Metadata,
+		Builder:       orderArgs.BuilderCode,
+		Expiration:    0,
 	}
 
 	// 获取合约配置
 	contractConfig := getContractConfig(c.chainID, negRisk)
 
 	// 构建并签名订单
-	signedOrder, err := c.builder.BuildSignedOrder(orderData, contractConfig.Exchange, c.chainID, negRisk)
+	signedOrder, err := buildSignedOrderV2(c.signer.privateKey, orderData, contractConfig.Exchange, c.chainID)
 	if err != nil {
 		return nil, err
 	}

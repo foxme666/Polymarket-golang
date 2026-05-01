@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,10 +15,22 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
+func newLocalHTTPTestServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("local listener unavailable in this sandbox: %v", err)
+	}
+	ts := httptest.NewUnstartedServer(handler)
+	ts.Listener = listener
+	ts.Start()
+	return ts
+}
+
 // TestCallContractPlainStrategy 验证 plain 策略（无 gas 字段）在正常节点上工作
 func TestCallContractPlainStrategy(t *testing.T) {
 	var capturedBody []byte
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedBody, _ = io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000001234567890abcdef1234567890abcdef12345678"}`))
@@ -63,7 +76,7 @@ func TestCallContractPlainStrategy(t *testing.T) {
 // TestCallContractAutoDetectFallsThrough 验证当 plain 策略失败时自动尝试其他策略
 func TestCallContractAutoDetectFallsThrough(t *testing.T) {
 	callCount := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		body, _ := io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
@@ -118,7 +131,7 @@ func TestCallContractAutoDetectFallsThrough(t *testing.T) {
 // TestCallContractFallbackRPC 验证主 RPC 失败时降级到备用 RPC
 func TestCallContractFallbackRPC(t *testing.T) {
 	// 主 RPC：所有请求都失败
-	primaryTS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	primaryTS := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"max fee per gas less than block base fee"}}`))
@@ -126,7 +139,7 @@ func TestCallContractFallbackRPC(t *testing.T) {
 	defer primaryTS.Close()
 
 	// 备用 RPC：成功
-	fallbackTS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fallbackTS := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000001234567890abcdef1234567890abcdef12345678"}`))
@@ -173,7 +186,7 @@ func TestCallContractFallbackRPC(t *testing.T) {
 
 // TestCallContractError 验证所有策略和所有 RPC 都失败时返回错误
 func TestCallContractError(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"execution reverted"}}`))

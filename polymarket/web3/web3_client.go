@@ -316,21 +316,12 @@ func (c *PolymarketWeb3Client) waitForReceipt(txHash common.Hash) (*TransactionR
 	}
 }
 
-// SplitPosition 分割USDC为两个互补头寸
+// SplitPosition 分割 pUSD 为两个互补头寸。
 func (c *PolymarketWeb3Client) SplitPosition(conditionID common.Hash, amount float64, negRisk bool) (*TransactionReceipt, error) {
 	amountInt := ToWei(amount, 6)
 
-	var to common.Address
-	var data []byte
-	var err error
-
-	if negRisk {
-		to = NegRiskAdapterAddress
-		data, err = NegRiskAdapterABI.Pack("splitPosition", c.USDCAddress, HashZero, conditionID, []*big.Int{big.NewInt(1), big.NewInt(2)}, amountInt)
-	} else {
-		to = c.ConditionalTokensAddress
-		data, err = ConditionalTokensABI.Pack("splitPosition", c.USDCAddress, HashZero, conditionID, []*big.Int{big.NewInt(1), big.NewInt(2)}, amountInt)
-	}
+	to := c.ctfAdapterAddress(negRisk)
+	data, err := c.encodeSplit(conditionID, amountInt)
 	if err != nil {
 		return nil, err
 	}
@@ -338,21 +329,12 @@ func (c *PolymarketWeb3Client) SplitPosition(conditionID common.Hash, amount flo
 	return c.Execute(to, data, "Split Position")
 }
 
-// MergePosition 合并两个互补头寸为USDC
+// MergePosition 合并两个互补头寸为 pUSD；V2 adapter 会自动处理底层 USDC.e wrap。
 func (c *PolymarketWeb3Client) MergePosition(conditionID common.Hash, amount float64, negRisk bool) (*TransactionReceipt, error) {
 	amountInt := ToWei(amount, 6)
 
-	var to common.Address
-	var data []byte
-	var err error
-
-	if negRisk {
-		to = NegRiskAdapterAddress
-		data, err = NegRiskAdapterABI.Pack("mergePositions", c.USDCAddress, HashZero, conditionID, []*big.Int{big.NewInt(1), big.NewInt(2)}, amountInt)
-	} else {
-		to = c.ConditionalTokensAddress
-		data, err = ConditionalTokensABI.Pack("mergePositions", c.USDCAddress, HashZero, conditionID, []*big.Int{big.NewInt(1), big.NewInt(2)}, amountInt)
-	}
+	to := c.ctfAdapterAddress(negRisk)
+	data, err := c.encodeMerge(conditionID, amountInt)
 	if err != nil {
 		return nil, err
 	}
@@ -360,23 +342,10 @@ func (c *PolymarketWeb3Client) MergePosition(conditionID common.Hash, amount flo
 	return c.Execute(to, data, "Merge Position")
 }
 
-// RedeemPosition 赎回头寸为USDC
+// RedeemPosition 赎回头寸为 pUSD；V2 adapter 会自动处理底层 USDC.e wrap。
 func (c *PolymarketWeb3Client) RedeemPosition(conditionID common.Hash, amounts []float64, negRisk bool) (*TransactionReceipt, error) {
-	var to common.Address
-	var data []byte
-	var err error
-
-	if negRisk {
-		to = NegRiskAdapterAddress
-		intAmounts := make([]*big.Int, len(amounts))
-		for i, amt := range amounts {
-			intAmounts[i] = ToWei(amt, 6)
-		}
-		data, err = NegRiskAdapterABI.Pack("redeemPositions", conditionID, intAmounts)
-	} else {
-		to = c.ConditionalTokensAddress
-		data, err = ConditionalTokensABI.Pack("redeemPositions", c.USDCAddress, HashZero, conditionID, []*big.Int{big.NewInt(1), big.NewInt(2)})
-	}
+	to := c.ctfAdapterAddress(negRisk)
+	data, err := c.encodeRedeem(conditionID)
 	if err != nil {
 		return nil, err
 	}
@@ -390,8 +359,8 @@ func (c *PolymarketWeb3Client) ConvertPositions(questionIDs []string, amount flo
 	negRiskMarketID := common.HexToHash(questionIDs[0][:len(questionIDs[0])-2] + "00")
 	indexSet := big.NewInt(int64(GetIndexSet(questionIDs)))
 
-	to := NegRiskAdapterAddress
-	data, err := NegRiskAdapterABI.Pack("convertPositions", negRiskMarketID, indexSet, amountInt)
+	to := c.NegRiskCtfAdapter
+	data, err := c.encodeConvert(negRiskMarketID, indexSet, amountInt)
 	if err != nil {
 		return nil, err
 	}
@@ -399,9 +368,9 @@ func (c *PolymarketWeb3Client) ConvertPositions(questionIDs []string, amount flo
 	return c.Execute(to, data, "Convert Positions")
 }
 
-// SetCollateralApproval 设置USDC授权
+// SetCollateralApproval 设置 pUSD collateral 授权
 func (c *PolymarketWeb3Client) SetCollateralApproval(spender common.Address) (*TransactionReceipt, error) {
-	to := c.USDCAddress
+	to := c.CollateralAddress
 	data, err := USDCABI.Pack("approve", spender, MaxUint256())
 	if err != nil {
 		return nil, err
@@ -423,29 +392,29 @@ func (c *PolymarketWeb3Client) SetConditionalTokensApproval(spender common.Addre
 func (c *PolymarketWeb3Client) SetAllApprovals() ([]*TransactionReceipt, error) {
 	var receipts []*TransactionReceipt
 
-	fmt.Println("Approving ConditionalTokens as spender on USDC")
-	r, err := c.SetCollateralApproval(c.ConditionalTokensAddress)
+	fmt.Println("Approving CTF collateral adapter as spender on pUSD")
+	r, err := c.SetCollateralApproval(c.CtfCollateralAdapter)
 	if err != nil {
 		return receipts, err
 	}
 	receipts = append(receipts, r)
 
-	fmt.Println("Approving CTFExchange as spender on USDC")
+	fmt.Println("Approving CTFExchange as spender on pUSD")
 	r, err = c.SetCollateralApproval(c.ExchangeAddress)
 	if err != nil {
 		return receipts, err
 	}
 	receipts = append(receipts, r)
 
-	fmt.Println("Approving NegRiskCtfExchange as spender on USDC")
+	fmt.Println("Approving NegRiskCtfExchange as spender on pUSD")
 	r, err = c.SetCollateralApproval(c.NegRiskExchangeAddress)
 	if err != nil {
 		return receipts, err
 	}
 	receipts = append(receipts, r)
 
-	fmt.Println("Approving NegRiskAdapter as spender on USDC")
-	r, err = c.SetCollateralApproval(NegRiskAdapterAddress)
+	fmt.Println("Approving NegRisk collateral adapter as spender on pUSD")
+	r, err = c.SetCollateralApproval(c.NegRiskCtfAdapter)
 	if err != nil {
 		return receipts, err
 	}
@@ -465,8 +434,15 @@ func (c *PolymarketWeb3Client) SetAllApprovals() ([]*TransactionReceipt, error) 
 	}
 	receipts = append(receipts, r)
 
-	fmt.Println("Approving NegRiskAdapter as spender on ConditionalTokens")
-	r, err = c.SetConditionalTokensApproval(NegRiskAdapterAddress)
+	fmt.Println("Approving CTF collateral adapter as spender on ConditionalTokens")
+	r, err = c.SetConditionalTokensApproval(c.CtfCollateralAdapter)
+	if err != nil {
+		return receipts, err
+	}
+	receipts = append(receipts, r)
+
+	fmt.Println("Approving NegRisk collateral adapter as spender on ConditionalTokens")
+	r, err = c.SetConditionalTokensApproval(c.NegRiskCtfAdapter)
 	if err != nil {
 		return receipts, err
 	}
@@ -476,7 +452,7 @@ func (c *PolymarketWeb3Client) SetAllApprovals() ([]*TransactionReceipt, error) 
 	return receipts, nil
 }
 
-// TransferUSDC 转账USDC
+// TransferUSDC 兼容旧调用名；V2 下转账的是 pUSD collateral。
 func (c *PolymarketWeb3Client) TransferUSDC(recipient common.Address, amount float64) (*TransactionReceipt, error) {
 	balance, err := c.GetUSDCBalance(common.Address{})
 	if err != nil {
@@ -484,16 +460,16 @@ func (c *PolymarketWeb3Client) TransferUSDC(recipient common.Address, amount flo
 	}
 	balanceFloat, _ := balance.Float64()
 	if balanceFloat < amount {
-		return nil, fmt.Errorf("insufficient USDC balance: %f < %f", balanceFloat, amount)
+		return nil, fmt.Errorf("insufficient collateral balance: %f < %f", balanceFloat, amount)
 	}
 
 	amountInt := ToWei(amount, 6)
-	to := c.USDCAddress
+	to := c.CollateralAddress
 	data, err := USDCABI.Pack("transfer", recipient, amountInt)
 	if err != nil {
 		return nil, err
 	}
-	return c.Execute(to, data, "USDC Transfer")
+	return c.Execute(to, data, "Collateral Transfer")
 }
 
 // TransferToken 转账条件代币
@@ -534,17 +510,8 @@ func (c *PolymarketWeb3Client) RedeemPositions(requests []RedeemRequest) (*Trans
 			var data []byte
 			var err error
 
-			if req.NegRisk {
-				to = NegRiskAdapterAddress
-				intAmounts := make([]*big.Int, len(req.Amounts))
-				for i, amt := range req.Amounts {
-					intAmounts[i] = ToWei(amt, 6)
-				}
-				data, err = NegRiskAdapterABI.Pack("redeemPositions", req.ConditionID, intAmounts)
-			} else {
-				to = c.ConditionalTokensAddress
-				data, err = ConditionalTokensABI.Pack("redeemPositions", c.USDCAddress, HashZero, req.ConditionID, []*big.Int{big.NewInt(1), big.NewInt(2)})
-			}
+			to = c.ctfAdapterAddress(req.NegRisk)
+			data, err = c.encodeRedeem(req.ConditionID)
 			if err != nil {
 				return nil, fmt.Errorf("failed to encode redeem for condition %s: %w", req.ConditionID.Hex(), err)
 			}
