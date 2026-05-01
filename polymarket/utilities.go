@@ -103,12 +103,15 @@ func OrderToJSONWithPostOnly(order *SignedOrder, owner string, orderType OrderTy
 		"builder":       order.Builder.Hex(),
 		"signature":     signatureHex,
 	}
-	return map[string]interface{}{
+	payload := map[string]interface{}{
 		"order":     orderDict,
 		"owner":     owner,
 		"orderType": string(orderType),
-		"postOnly":  postOnly,
 	}
+	if postOnly {
+		payload["postOnly"] = true
+	}
+	return payload
 }
 
 // IsTickSizeSmaller 检查tick size是否更小

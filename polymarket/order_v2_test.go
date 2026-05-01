@@ -78,7 +78,7 @@ func TestOrderToJSONWithPostOnlyUsesV2WireShape(t *testing.T) {
 		Signature:     []byte{1, 2, 3},
 	}
 
-	payload := OrderToJSONWithPostOnly(order, "api-key", OrderTypeGTC, true)
+	payload := OrderToJSON(order, "api-key", OrderTypeGTC)
 	orderPayload, ok := payload["order"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("order payload type = %T", payload["order"])
@@ -98,8 +98,13 @@ func TestOrderToJSONWithPostOnlyUsesV2WireShape(t *testing.T) {
 	if orderPayload["signature"] != "0x010203" {
 		t.Fatalf("unexpected signature: %v", orderPayload["signature"])
 	}
-	if payload["postOnly"] != true {
-		t.Fatalf("unexpected postOnly: %v", payload["postOnly"])
+	if _, exists := payload["postOnly"]; exists {
+		t.Fatalf("V2 default order payload must not contain postOnly=false")
+	}
+
+	postOnlyPayload := OrderToJSONWithPostOnly(order, "api-key", OrderTypeGTC, true)
+	if postOnlyPayload["postOnly"] != true {
+		t.Fatalf("unexpected postOnly: %v", postOnlyPayload["postOnly"])
 	}
 }
 
