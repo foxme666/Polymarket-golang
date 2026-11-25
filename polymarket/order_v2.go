@@ -18,10 +18,9 @@ import (
 )
 
 var (
-	orderV2ProtocolName    = crypto.Keccak256Hash([]byte("Polymarket CTF Exchange"))
-	orderV2ProtocolVersion = crypto.Keccak256Hash([]byte("2"))
-	orderV2StructureHash   = crypto.Keccak256Hash([]byte("Order(uint256 salt,address maker,address signer,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,uint8 side,uint8 signatureType,uint256 timestamp,bytes32 metadata,bytes32 builder)"))
-	orderV2Structure       = []abi.Type{
+	orderV2ProtocolName  = crypto.Keccak256Hash([]byte("Polymarket CTF Exchange"))
+	orderV2StructureHash = crypto.Keccak256Hash([]byte("Order(uint256 salt,address maker,address signer,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,uint8 side,uint8 signatureType,uint256 timestamp,bytes32 metadata,bytes32 builder)"))
+	orderV2Structure     = []abi.Type{
 		eip712.Bytes32, // typehash
 		eip712.Uint256, // salt
 		eip712.Address, // maker
@@ -37,13 +36,62 @@ var (
 	}
 )
 
-func buildSignedOrderV2(privateKey *ecdsa.PrivateKey, data *OrderDataV2, exchangeAddr string, chainID int) (*SignedOrder, error) {
+type orderDomain struct {
+	chainID  int
+	exchange string
+	version  string
+}
+
+// resolveOrderDomain selects the verifying contract and domain version together for this asset.
+func (c *ClobClient) resolveOrderDomain(tokenID string, options *PartialCreateOrderOptions, allowLookup bool) (orderDomain, error) {
+	if c.chainID != Polygon && c.chainID != Amoy {
+		return orderDomain{}, fmt.Errorf("unsupported order chain ID %d", c.chainID)
+	}
+	if options == nil {
+		options = &PartialCreateOrderOptions{}
+	}
+	switch options.MarketVersion {
+	case MarketVersionV2:
+		return orderDomain{chainID: c.chainID, exchange: ExchangeV3, version: "3"}, nil
+	case "", MarketVersionV1:
+		var negRisk bool
+		if options.NegRisk != nil {
+			negRisk = *options.NegRisk
+		} else if !allowLookup {
+			return orderDomain{}, fmt.Errorf("RawOrder mode requires NegRisk to be provided in options for CTF markets")
+		} else {
+			var err error
+			negRisk, err = c.GetNegRisk(tokenID)
+			if err != nil {
+				return orderDomain{}, err
+			}
+		}
+		return orderDomain{chainID: c.chainID, exchange: getContractConfig(c.chainID, negRisk).Exchange, version: "2"}, nil
+	default:
+		return orderDomain{}, fmt.Errorf("unsupported market version %q", options.MarketVersion)
+	}
+}
+
+// GetOrderHash returns the EIP-712 digest using the same market options as order creation.
+// For offline CTF hashing, supply NegRisk. V2 hashing needs only MarketVersionV2.
+func (c *ClobClient) GetOrderHash(order *SignedOrder, options *PartialCreateOrderOptions) (common.Hash, error) {
+	if order == nil || order.TokenId == nil {
+		return common.Hash{}, fmt.Errorf("order and token ID are required")
+	}
+	domain, err := c.resolveOrderDomain(order.TokenId.String(), options, true)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return buildOrderHashV2(order, domain)
+}
+
+func buildSignedOrderV2(privateKey *ecdsa.PrivateKey, data *OrderDataV2, domain orderDomain) (*SignedOrder, error) {
 	order, err := buildOrderV2(data)
 	if err != nil {
 		return nil, err
 	}
 
-	orderHash, err := buildOrderHashV2(order, exchangeAddr, chainID)
+	orderHash, err := buildOrderHashV2(order, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -125,15 +173,29 @@ func buildOrderV2(data *OrderDataV2) (*SignedOrder, error) {
 	}, nil
 }
 
-func buildOrderHashV2(order *SignedOrder, exchangeAddr string, chainID int) (common.Hash, error) {
+func buildOrderHashV2(order *SignedOrder, domain orderDomain) (common.Hash, error) {
 	if order == nil {
 		return common.Hash{}, fmt.Errorf("order is required")
 	}
+	for _, field := range []struct {
+		name  string
+		value *big.Int
+		bits  int
+	}{
+		{"salt", order.Salt, 256}, {"tokenId", order.TokenId, 256},
+		{"makerAmount", order.MakerAmount, 256}, {"takerAmount", order.TakerAmount, 256},
+		{"side", order.Side, 8}, {"signatureType", order.SignatureType, 8},
+		{"timestamp", order.Timestamp, 256},
+	} {
+		if field.value == nil || field.value.Sign() < 0 || field.value.BitLen() > field.bits {
+			return common.Hash{}, fmt.Errorf("%s must be a uint%d", field.name, field.bits)
+		}
+	}
 	domainSeparator, err := eip712.BuildEIP712DomainSeparator(
 		orderV2ProtocolName,
-		orderV2ProtocolVersion,
-		big.NewInt(int64(chainID)),
-		common.HexToAddress(exchangeAddr),
+		crypto.Keccak256Hash([]byte(domain.version)),
+		big.NewInt(int64(domain.chainID)),
+		common.HexToAddress(domain.exchange),
 	)
 	if err != nil {
 		return common.Hash{}, err

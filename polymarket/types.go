@@ -159,18 +159,28 @@ type OrdersScoringParams struct {
 	OrderIDs []string `json:"order_ids"`
 }
 
+// MarketVersion is the Gamma market's protocol version. An omitted version uses the legacy CTF market.
+type MarketVersion string
+
+const (
+	MarketVersionV1 MarketVersion = "v1"
+	MarketVersionV2 MarketVersion = "v2"
+)
+
 // CreateOrderOptions 创建订单选项
 type CreateOrderOptions struct {
-	TickSize TickSize `json:"tick_size"`
-	NegRisk  bool     `json:"neg_risk"`
+	MarketVersion MarketVersion `json:"market_version,omitempty"`
+	TickSize      TickSize      `json:"tick_size"`
+	NegRisk       bool          `json:"neg_risk"`
 }
 
 // PartialCreateOrderOptions 部分创建订单选项
 type PartialCreateOrderOptions struct {
-	TickSize  *TickSize  `json:"tick_size,omitempty"`  // tick size（RawOrder 模式下必须提供）
-	NegRisk   *bool      `json:"neg_risk,omitempty"`   // neg risk（RawOrder 模式下必须提供）
-	RawOrder  bool       `json:"raw_order,omitempty"`  // 跳过从服务器获取 tick_size/neg_risk/fee_rate，必须提供 TickSize 和 NegRisk
-	OrderType *OrderType `json:"order_type,omitempty"` // 订单类型：GTC, FOK, GTD, FAK（默认 GTC）
+	MarketVersion MarketVersion `json:"market_version,omitempty"` // v1 使用 CTF token ID，v2 使用 position ID
+	TickSize      *TickSize     `json:"tick_size,omitempty"`      // tick size（RawOrder 模式下必须提供）
+	NegRisk       *bool         `json:"neg_risk,omitempty"`       // neg risk（CTF RawOrder 模式下必须提供）
+	RawOrder      bool          `json:"raw_order,omitempty"`      // 使用本地 TickSize 和 CTF 市场的 NegRisk
+	OrderType     *OrderType    `json:"order_type,omitempty"`     // 订单类型：GTC, FOK, GTD, FAK（默认 GTC）
 }
 
 // RoundConfig 舍入配置

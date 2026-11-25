@@ -2,15 +2,23 @@ package polymarket
 
 import (
 	"fmt"
-	"math/big"
 	"strconv"
 
 	obuilder "github.com/foxme666/Polymarket-golang/polymarket/order_builder"
-	"github.com/polymarket/go-order-utils/pkg/model"
 )
 
-// ResolveTickSize 解析tick size
-func (c *ClobClient) resolveTickSize(tokenID string, tickSize *TickSize) (TickSize, error) {
+// resolveTickSize uses the supplied tick for raw orders and checks the market minimum otherwise.
+func (c *ClobClient) resolveTickSize(tokenID string, options *PartialCreateOrderOptions) (TickSize, error) {
+	var tickSize *TickSize
+	if options != nil {
+		tickSize = options.TickSize
+		if options.RawOrder {
+			if tickSize == nil {
+				return "", fmt.Errorf("RawOrder mode requires TickSize to be provided in options")
+			}
+			return *tickSize, nil
+		}
+	}
 	minTickSize, err := c.GetTickSize(tokenID)
 	if err != nil {
 		return "", err
@@ -49,49 +57,16 @@ func (c *ClobClient) CreateOrder(orderArgs *OrderArgs, options *PartialCreateOrd
 		return nil, err
 	}
 
-	var side model.Side
-	var makerAmount, takerAmount *big.Int
-	var negRisk bool
-	var err error
-	var tickSize TickSize
-
-	// 检查是否使用原始订单模式（跳过从服务器获取 tick_size）
-	rawOrder := options != nil && options.RawOrder
-
-	if rawOrder {
-		// 原始订单模式：必须提供 TickSize
-		if options.TickSize == nil {
-			return nil, fmt.Errorf("RawOrder mode requires TickSize to be provided in options")
-		}
-		tickSize = *options.TickSize
-
-		// 解析 neg risk（必须提供）
-		if options.NegRisk == nil {
-			return nil, fmt.Errorf("RawOrder mode requires NegRisk to be provided in options")
-		}
-		negRisk = *options.NegRisk
-	} else {
-		// 标准模式：从服务器获取 tick_size（如果未提供）
-		var tickSizePtr *TickSize
-		if options != nil && options.TickSize != nil {
-			tickSizePtr = options.TickSize
-		}
-		tickSize, err = c.resolveTickSize(orderArgs.TokenID, tickSizePtr)
-		if err != nil {
-			return nil, err
-		}
-
-		// 解析neg risk
-		if options != nil && options.NegRisk != nil {
-			negRisk = *options.NegRisk
-		} else {
-			negRisk, err = c.GetNegRisk(orderArgs.TokenID)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// V2订单签名不再携带 feeRateBps；市场手续费由撮合时决定。
+	allowLookup := options == nil || !options.RawOrder
+	domain, err := c.resolveOrderDomain(orderArgs.TokenID, options, allowLookup)
+	if err != nil {
+		return nil, err
+	}
+	tickSize, err := c.resolveTickSize(orderArgs.TokenID, options)
+	if err != nil {
+		return nil, err
+	}
+	if options == nil || !options.RawOrder {
 		orderArgs.FeeRateBps = 0
 	}
 
@@ -108,7 +83,7 @@ func (c *ClobClient) CreateOrder(orderArgs *OrderArgs, options *PartialCreateOrd
 	}
 
 	// 获取订单金额（带舍入）
-	side, makerAmount, takerAmount, err = c.builder.GetOrderAmounts(
+	side, makerAmount, takerAmount, err := c.builder.GetOrderAmounts(
 		orderArgs.Side,
 		orderArgs.Size,
 		orderArgs.Price,
@@ -132,16 +107,7 @@ func (c *ClobClient) CreateOrder(orderArgs *OrderArgs, options *PartialCreateOrd
 		Expiration:    orderArgs.Expiration,
 	}
 
-	// 获取合约配置
-	contractConfig := getContractConfig(c.chainID, negRisk)
-
-	// 构建并签名订单
-	signedOrder, err := buildSignedOrderV2(c.signer.privateKey, orderData, contractConfig.Exchange, c.chainID)
-	if err != nil {
-		return nil, err
-	}
-
-	return signedOrder, nil
+	return buildSignedOrderV2(c.signer.privateKey, orderData, domain)
 }
 
 // CreateMarketOrder 创建并签名市价订单
@@ -151,12 +117,17 @@ func (c *ClobClient) CreateMarketOrder(orderArgs *MarketOrderArgs, options *Part
 		return nil, err
 	}
 
-	// 解析tick size
-	var tickSizePtr *TickSize
-	if options != nil && options.TickSize != nil {
-		tickSizePtr = options.TickSize
+	// RawOrder is a limit-order option. Market orders still check the market minimum tick.
+	var marketOptions PartialCreateOrderOptions
+	if options != nil {
+		marketOptions = *options
+		marketOptions.RawOrder = false
 	}
-	tickSize, err := c.resolveTickSize(orderArgs.TokenID, tickSizePtr)
+	domain, err := c.resolveOrderDomain(orderArgs.TokenID, options, true)
+	if err != nil {
+		return nil, err
+	}
+	tickSize, err := c.resolveTickSize(orderArgs.TokenID, &marketOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -174,17 +145,6 @@ func (c *ClobClient) CreateMarketOrder(orderArgs *MarketOrderArgs, options *Part
 	if !PriceValid(orderArgs.Price, tickSize) {
 		tickSizeFloat, _ := strconv.ParseFloat(string(tickSize), 64)
 		return nil, fmt.Errorf("price (%.6f), min: %s - max: %.6f", orderArgs.Price, tickSize, 1.0-tickSizeFloat)
-	}
-
-	// 解析neg risk
-	negRisk := false
-	if options != nil && options.NegRisk != nil {
-		negRisk = *options.NegRisk
-	} else {
-		negRisk, err = c.GetNegRisk(orderArgs.TokenID)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	// V2订单签名不再携带 feeRateBps；市场手续费由撮合时决定。
@@ -221,16 +181,7 @@ func (c *ClobClient) CreateMarketOrder(orderArgs *MarketOrderArgs, options *Part
 		Expiration:    0,
 	}
 
-	// 获取合约配置
-	contractConfig := getContractConfig(c.chainID, negRisk)
-
-	// 构建并签名订单
-	signedOrder, err := buildSignedOrderV2(c.signer.privateKey, orderData, contractConfig.Exchange, c.chainID)
-	if err != nil {
-		return nil, err
-	}
-
-	return signedOrder, nil
+	return buildSignedOrderV2(c.signer.privateKey, orderData, domain)
 }
 
 // CreateAndPostOrder 创建并提交订单（便捷方法）

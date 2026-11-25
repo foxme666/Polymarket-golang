@@ -1,6 +1,7 @@
 package polymarket
 
 const (
+	ExchangeV3                  = "0xe3333700cA9d93003F00f0F71f8515005F6c00Aa"
 	PolygonCTFExchangeV2        = "0xE111180000d2663C0091e4f400237545B87B996B"
 	PolygonNegRiskExchangeV2    = "0xe2222d279d744050d28e00520010520000310F59"
 	PolygonConditionalTokens    = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"
